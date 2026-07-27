@@ -1,0 +1,12 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+godot
+
+.venv
+.DS_Store
+
+# generated JSON from data.xlsx
+src/data/db/*.json
+
+*.apk*

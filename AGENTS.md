@@ -1,0 +1,77 @@
+# AGENTS.md
+
+## Project
+
+**Street** is a Godot 4.7 portrait 2D mobile tycoon game.
+
+- The repository root is the Godot project root.
+- Runtime source lives under `srcs/`.
+- `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
+- The current implementation is an initial bootstrap: `srcs/main.tscn`, `GameManager`, and `SaveManager`.
+
+Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
+
+## Commands
+
+```bash
+# Confirm the local engine version
+./godot --version
+
+# Open the project in the editor
+./godot --editor --path "$PWD"
+
+# Refresh imports and validate scripts/resources
+./godot --headless --editor --path "$PWD" --quit
+
+# Run all GUT tests after project tests exist under tests/
+./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
+  -gdir=res://tests -ginclude_subdirs -gexit
+
+# Run one GUT test file
+./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
+  -gtest=res://tests/test_example.gd -gexit
+```
+
+GUT is installed, but the project does not have a test directory or test configuration yet. Do not report a test pass when no tests were discovered. `gdlint` is not currently installed, so the Godot headless editor check is the available script validation command.
+
+## Architecture
+
+- `srcs/main.tscn` is the existing bootstrap scene.
+- `project.godot` autoloads `GameManager` and `SaveManager`.
+- `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
+- Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
+- `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
+- Feature-local behavior such as movement, customer flow, station interaction, animation, and rendering belongs in focused scripts under `srcs/`, not in the autoloads.
+
+## Code-First Rules
+
+- Implement gameplay logic, UI, node composition, and tuning data in `.gd` files first.
+- Build runtime node and UI trees from GDScript.
+- Do not create a new `.tscn` file without asking the user first. The existing `srcs/main.tscn` remains the bootstrap exception.
+- Do not introduce an xlsx, JSON, or `.tres` game-database pipeline without approval.
+- Until a different data pipeline is approved, keep catalog and balance values in typed GDScript constants, classes, or dictionaries.
+- Asset files may remain in their native formats under `assets/`; the code-first rule applies to game structure and data, not imported art and audio.
+
+## Workflow
+
+- Inspect the relevant source, tests, `docs/`, and project configuration before editing.
+- Prefer the smallest correct change that satisfies the documented acceptance criteria.
+- Preserve the fixed MVP scope in `docs/07_mvp_scope.md`.
+- When confirmed gameplay behavior changes, update every affected design document listed in the README change-management section.
+- Keep temporary manual test helpers separate from canonical gameplay data.
+- Never claim that a planned directory, test, screen, or system already exists.
+
+## GDScript Notes
+
+- Do not redeclare the same `var` name in one function scope.
+- Treat `Could not preload resource script` as a likely parser or scope error in the most recently edited script.
+- Keep long state machines explicit.
+- When adding a new UI state, update the state definition, input dispatch, state-specific input handling, visibility rules, refresh/render logic, and tests together.
+- Use typed variables, parameters, return values, and signals for shared gameplay state.
+
+## Testing
+
+- Run the Godot headless editor check after changing `.gd` files or resources.
+- Add focused GUT coverage for gameplay behavior once the project test structure is introduced.
+- After every Godot or GUT run, check for `SCRIPT ERROR`, `Parser Error`, `Could not preload resource script`, `[Failed]`, and zero-test discovery.
+- Report resource leak warnings separately from test failures.
