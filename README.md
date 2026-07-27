@@ -14,15 +14,17 @@
 
 ## 현재 구현 상태
 
-현재 저장소는 게임 제작을 시작하기 위한 초기 골격이다.
+현재 저장소에는 실행과 저장 로드를 담당하는 첫 번째 코드 기반이 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
-- `srcs/main.gd`: 부트스트랩 장면에 연결된 초기 스크립트
-- `srcs/globals/game_manager.gd`: 전역 게임 상태를 맡을 오토로드
-- `srcs/globals/save_manager.gd`: 저장과 복구를 맡을 오토로드
+- `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
+- `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
+- `srcs/globals/game_manager.gd`: `state`와 첫날 기본 상태를 맡는 오토로드
+- `srcs/globals/save_manager.gd`: `user://save.json` 읽기·쓰기·백업을 맡는 오토로드
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
-- GUT 9.7.1은 설치돼 있지만 프로젝트 테스트 디렉터리와 테스트 설정은 아직 없다.
-- 실행용 메인 장면은 아직 `project.godot`에 등록되지 않았다.
+- 실행용 메인 장면이 `project.godot`에 등록돼 있다.
+- GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
+- 낮 화면과 새벽 화면은 아직 구현하지 않았다. Loading은 목적 화면이 없으면 현재 화면을 유지하고 오류를 기록한다.
 
 ## 개발 원칙
 
@@ -30,7 +32,8 @@
 - 새 `.tscn` 파일은 만들기 전에 사용자 승인을 받는다. 기존 `srcs/main.tscn`은 부트스트랩으로 유지한다.
 - Day, 영업 단계, 시간과 타이머, 통화, 재고, 해금 및 진행도 같은 전역 상태는 `GameManager`가 소유한다.
 - `SaveManager`는 `GameManager`의 확정된 상태를 단계 경계에서 저장하고 복구한다.
-- 별도 승인이 있기 전에는 xlsx, JSON, `.tres` 기반 게임 데이터 파이프라인을 도입하지 않는다.
+- 화면은 `GameManager.state`를 변경하고 인자 없는 `screen_change_requested`를 보낸다. 다음 화면의 선택과 생성은 `Main`만 담당한다.
+- 게임 DB에는 xlsx, JSON, `.tres` 파이프라인을 도입하지 않는다. 로컬 저장은 승인된 예외로 `user://save.json`을 사용한다.
 - 확정된 게임 동작과 MVP 범위는 `docs/`를 기준으로 구현한다.
 
 자세한 에이전트 작업 규칙은 [AGENTS.md](AGENTS.md)를 따른다.
@@ -46,8 +49,12 @@ street/
 │   ├── globals/
 │   │   ├── game_manager.gd
 │   │   └── save_manager.gd
+│   ├── screens/
+│   │   └── loading_screen.gd
 │   ├── main.gd        # 부트스트랩 스크립트
 │   └── main.tscn      # 기존 부트스트랩 장면
+├── tests/             # GUT 프로젝트 테스트
+├── .gutconfig.json
 └── project.godot
 ```
 
@@ -66,14 +73,12 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 ./godot --headless --editor --path "$PWD" --quit
 ```
 
-프로젝트 테스트가 `tests/` 아래에 추가된 뒤에는 다음 명령으로 GUT 테스트를 실행한다.
+다음 명령으로 `tests/` 아래의 GUT 테스트를 실행한다.
 
 ```bash
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
   -gdir=res://tests -ginclude_subdirs -gexit
 ```
-
-현재는 프로젝트 테스트가 없으므로 GUT 실행 결과를 테스트 통과로 간주하지 않는다.
 
 ## 문서 상태 표기
 

@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation is an initial bootstrap: `srcs/main.tscn`, `GameManager`, and `SaveManager`.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, JSON save loading, and GUT coverage for this foundation.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -23,7 +23,7 @@ Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not inf
 # Refresh imports and validate scripts/resources
 ./godot --headless --editor --path "$PWD" --quit
 
-# Run all GUT tests after project tests exist under tests/
+# Run all GUT tests
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
   -gdir=res://tests -ginclude_subdirs -gexit
 
@@ -32,12 +32,14 @@ Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not inf
   -gtest=res://tests/test_example.gd -gexit
 ```
 
-GUT is installed, but the project does not have a test directory or test configuration yet. Do not report a test pass when no tests were discovered. `gdlint` is not currently installed, so the Godot headless editor check is the available script validation command.
+GUT is configured to discover project tests under `tests/`. Do not report a test pass when no tests were discovered. `gdlint` is not currently installed, so the Godot headless editor check is the available script validation command.
 
 ## Architecture
 
 - `srcs/main.tscn` is the existing bootstrap scene.
 - `project.godot` autoloads `GameManager` and `SaveManager`.
+- `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
+- `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
 - `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
@@ -48,7 +50,7 @@ GUT is installed, but the project does not have a test directory or test configu
 - Implement gameplay logic, UI, node composition, and tuning data in `.gd` files first.
 - Build runtime node and UI trees from GDScript.
 - Do not create a new `.tscn` file without asking the user first. The existing `srcs/main.tscn` remains the bootstrap exception.
-- Do not introduce an xlsx, JSON, or `.tres` game-database pipeline without approval.
+- Do not introduce an xlsx, JSON, or `.tres` game-database pipeline without approval. The approved exception is the single local save file at `user://save.json`.
 - Until a different data pipeline is approved, keep catalog and balance values in typed GDScript constants, classes, or dictionaries.
 - Asset files may remain in their native formats under `assets/`; the code-first rule applies to game structure and data, not imported art and audio.
 

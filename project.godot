@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="street"
+run/main_scene="uid://bfskn8r1v171f"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
