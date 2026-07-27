@@ -7,24 +7,26 @@
 | 게임명 | **Street** |
 | 저장소명 | **`street`** |
 | 엔진 | Godot 4.7 |
-| 화면 | 세로형 고정 쿼터뷰 2D |
+| 화면 | 720 × 1280 세로형 쿼터뷰 2D |
 | MVP | Stage 01을 완주할 수 있는 내부용 버티컬 슬라이스 |
 | 문서 버전 | v0.1 |
 | 기준일 | 2026-07-27 |
 
 ## 현재 구현 상태
 
-현재 저장소에는 실행과 저장 로드를 담당하는 첫 번째 코드 기반이 구현돼 있다.
+현재 저장소에는 실행·저장 로드와 낮 화면 이동을 담당하는 코드 기반이 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
 - `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
+- `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 터치 이동 버튼과 드래그 카메라
+- `srcs/day/day_player.gd`: 주인공 이동, 4방향 표시 상태와 충돌
 - `srcs/globals/game_manager.gd`: `state`와 첫날 기본 상태를 맡는 오토로드
 - `srcs/globals/save_manager.gd`: `user://save.json` 읽기·쓰기·백업을 맡는 오토로드
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
 - 실행용 메인 장면이 `project.godot`에 등록돼 있다.
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
-- 낮 화면과 새벽 화면은 아직 구현하지 않았다. Loading은 목적 화면이 없으면 현재 화면을 유지하고 오류를 기록한다.
+- 새벽 화면은 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
 
 ## 개발 원칙
 
@@ -33,6 +35,7 @@
 - Day, 영업 단계, 시간과 타이머, 통화, 재고, 해금 및 진행도 같은 전역 상태는 `GameManager`가 소유한다.
 - `SaveManager`는 `GameManager`의 확정된 상태를 단계 경계에서 저장하고 복구한다.
 - 화면은 `GameManager.state`를 변경하고 인자 없는 `screen_change_requested`를 보낸다. 다음 화면의 선택과 생성은 `Main`만 담당한다.
+- 이동은 모바일 터치만 지원한다. PC 검증에서는 방향 버튼의 마우스 클릭 유지와 플레이 영역의 마우스 드래그를 사용하며 키보드 이동은 제공하지 않는다.
 - 게임 DB에는 xlsx, JSON, `.tres` 파이프라인을 도입하지 않는다. 로컬 저장은 승인된 예외로 `user://save.json`을 사용한다.
 - 확정된 게임 동작과 MVP 범위는 `docs/`를 기준으로 구현한다.
 
@@ -46,10 +49,13 @@ street/
 ├── assets/            # 아트·오디오 원본 및 게임 에셋
 ├── docs/              # 확정 기획과 수용 기준
 ├── srcs/
+│   ├── day/
+│   │   └── day_player.gd
 │   ├── globals/
 │   │   ├── game_manager.gd
 │   │   └── save_manager.gd
 │   ├── screens/
+│   │   ├── day_screen.gd
 │   │   └── loading_screen.gd
 │   ├── main.gd        # 부트스트랩 스크립트
 │   └── main.tscn      # 기존 부트스트랩 장면
@@ -77,7 +83,7 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 
 ```bash
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
-  -gdir=res://tests -ginclude_subdirs -gexit
+  -gdir=res://tests -gexit
 ```
 
 ## 문서 상태 표기

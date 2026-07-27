@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, JSON save loading, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, and GUT coverage for this foundation.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -25,7 +25,7 @@ Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not inf
 
 # Run all GUT tests
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
-  -gdir=res://tests -ginclude_subdirs -gexit
+  -gdir=res://tests -gexit
 
 # Run one GUT test file
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
@@ -33,6 +33,7 @@ Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not inf
 ```
 
 GUT is configured to discover project tests under `tests/`. Do not report a test pass when no tests were discovered. `gdlint` is not currently installed, so the Godot headless editor check is the available script validation command.
+Manual helpers under `tests/manual/` are excluded from automated discovery.
 
 ## Architecture
 
@@ -40,10 +41,12 @@ GUT is configured to discover project tests under `tests/`. Do not report a test
 - `project.godot` autoloads `GameManager` and `SaveManager`.
 - `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
+- `DayScreen` builds the gray Stage 01 map, mobile direction controls, player collision, fixed HUD, and bounded drag camera entirely from GDScript.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
 - `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
 - Feature-local behavior such as movement, customer flow, station interaction, animation, and rendering belongs in focused scripts under `srcs/`, not in the autoloads.
+- Gameplay movement is touch-only. Desktop testing uses held mouse clicks on the direction buttons and mouse dragging in the play area; do not add keyboard movement.
 
 ## Code-First Rules
 

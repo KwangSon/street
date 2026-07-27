@@ -2,7 +2,7 @@
   "dirs": [
     "res://tests"
   ],
-  "include_subdirs": true,
+  "include_subdirs": false,
   "prefix": "test_",
   "suffix": ".gd"
 }

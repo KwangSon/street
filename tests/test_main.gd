@@ -1,6 +1,9 @@
 extends GutTest
 
 const MainScript: Script = preload("res://srcs/main.gd")
+const DayScreenScript: Script = preload(
+	"res://srcs/screens/day_screen.gd"
+)
 const ScreenStubScript: Script = preload(
 	"res://tests/fixtures/screen_stub.gd"
 )
@@ -42,7 +45,7 @@ func test_main_reads_game_state_after_no_argument_signal() -> void:
 	assert_eq(main.get_child_count(), 1)
 
 
-func test_unimplemented_screen_keeps_loading_screen() -> void:
+func test_main_creates_day_screen_after_loading() -> void:
 	var saved_state: Dictionary = GameManager.create_default_game_state()
 	assert_eq(SaveManager.save_game_state(saved_state, TEST_PATH), OK)
 
@@ -50,9 +53,8 @@ func test_unimplemented_screen_keeps_loading_screen() -> void:
 	add_child_autofree(main)
 	await wait_process_frames(3)
 
-	assert_is(main.get_current_screen(), LoadingScreen)
+	assert_eq(main.get_current_screen().get_script(), DayScreenScript)
 	assert_eq(main.get_child_count(), 1)
-	assert_push_error("Screen is not implemented yet: day")
 
 
 func test_unknown_screen_keeps_current_screen() -> void:
