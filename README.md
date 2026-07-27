@@ -19,7 +19,8 @@
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
 - `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
-- `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 터치 이동 버튼과 드래그 카메라
+- `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동과 드래그 카메라
+- `srcs/day/day_navigation.gd`: 시설을 우회하는 40px A* 이동 경로
 - `srcs/day/day_player.gd`: 주인공 이동, 4방향 표시 상태와 충돌
 - `srcs/globals/game_manager.gd`: `state`와 첫날 기본 상태를 맡는 오토로드
 - `srcs/globals/save_manager.gd`: `user://save.json` 읽기·쓰기·백업을 맡는 오토로드
@@ -35,7 +36,7 @@
 - Day, 영업 단계, 시간과 타이머, 통화, 재고, 해금 및 진행도 같은 전역 상태는 `GameManager`가 소유한다.
 - `SaveManager`는 `GameManager`의 확정된 상태를 단계 경계에서 저장하고 복구한다.
 - 화면은 `GameManager.state`를 변경하고 인자 없는 `screen_change_requested`를 보낸다. 다음 화면의 선택과 생성은 `Main`만 담당한다.
-- 이동은 모바일 터치만 지원한다. PC 검증에서는 방향 버튼의 마우스 클릭 유지와 플레이 영역의 마우스 드래그를 사용하며 키보드 이동은 제공하지 않는다.
+- 플레이 영역을 탭하면 해당 월드 위치로 이동하고 드래그하면 카메라가 움직인다. PC 검증에서는 마우스 클릭과 드래그를 사용하며 키보드 이동은 제공하지 않는다.
 - 게임 DB에는 xlsx, JSON, `.tres` 파이프라인을 도입하지 않는다. 로컬 저장은 승인된 예외로 `user://save.json`을 사용한다.
 - 확정된 게임 동작과 MVP 범위는 `docs/`를 기준으로 구현한다.
 
@@ -50,6 +51,7 @@ street/
 ├── docs/              # 확정 기획과 수용 기준
 ├── srcs/
 │   ├── day/
+│   │   ├── day_navigation.gd
 │   │   └── day_player.gd
 │   ├── globals/
 │   │   ├── game_manager.gd
@@ -116,7 +118,7 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 | 배경 | 역사 고증 시뮬레이션이 아닌 밝은 에도 시대풍 |
 | 핵심 모티브 | Eatventure식 직접 이동, 접근 자동 작업, 직원 자동화 |
 | 화면 | 세로형 쿼터뷰 2D, 경계 안에서 수동 카메라 이동 |
-| 조작 | 터치 방향 버튼으로 이동, 플레이 영역 드래그로 카메라 이동, 작업은 접근 시 자동 |
+| 조작 | 플레이 영역 탭으로 이동, 드래그로 카메라 이동, 작업은 접근 시 자동 |
 | 기술 | Godot 2D + Blender 프리렌더 PNG 스프라이트 |
 | 캐릭터 방향 | 4방향 |
 | 첫날 | 아침부터 준비된 재료로 바로 영업 |

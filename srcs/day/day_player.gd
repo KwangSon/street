@@ -3,6 +3,7 @@ class_name DayPlayer
 
 const DEFAULT_MOVE_SPEED: float = 240.0
 const COLLISION_RADIUS: float = 28.0
+const ARRIVAL_DISTANCE: float = 4.0
 
 const FACING_UP: StringName = &"up"
 const FACING_DOWN: StringName = &"down"
@@ -13,9 +14,12 @@ const BODY_COLOR: Color = Color("d9783d")
 const DIRECTION_COLOR: Color = Color("fff4d6")
 
 var move_speed: float = DEFAULT_MOVE_SPEED
-var _movement_input: Vector2 = Vector2.ZERO
 var _facing_direction: StringName = FACING_DOWN
 var _direction_marker: Polygon2D
+var _path: PackedVector2Array = PackedVector2Array()
+var _path_index: int = 0
+var _destination: Vector2 = Vector2.ZERO
+var _has_destination: bool = false
 
 
 func _ready() -> void:
@@ -27,23 +31,72 @@ func _ready() -> void:
 	_update_direction_marker()
 
 
-func _physics_process(_delta: float) -> void:
-	velocity = _movement_input * move_speed
+func _physics_process(delta: float) -> void:
+	_advance_reached_waypoints()
+	if not _has_destination:
+		velocity = Vector2.ZERO
+		return
+
+	var next_waypoint: Vector2 = _path[_path_index]
+	var waypoint_offset: Vector2 = next_waypoint - position
+	var movement_direction: Vector2 = waypoint_offset.normalized()
+	velocity = movement_direction * minf(
+		move_speed,
+		waypoint_offset.length() / maxf(delta, 0.0001)
+	)
+	_update_facing_direction(movement_direction)
 	move_and_slide()
+	_advance_reached_waypoints()
 
 
-func set_movement_input(input_vector: Vector2) -> void:
-	_movement_input = input_vector.limit_length(1.0)
-	if not _movement_input.is_zero_approx():
-		_update_facing_direction(_movement_input)
+func follow_path(path: PackedVector2Array) -> bool:
+	clear_path()
+	if path.is_empty():
+		return false
+
+	_path = path.duplicate()
+	_path_index = 0
+	_destination = _path[_path.size() - 1]
+	_has_destination = true
+	_advance_reached_waypoints()
+	return _has_destination
 
 
-func get_movement_input() -> Vector2:
-	return _movement_input
+func clear_path() -> void:
+	_path = PackedVector2Array()
+	_path_index = 0
+	_has_destination = false
+	velocity = Vector2.ZERO
+
+
+func has_destination() -> bool:
+	return _has_destination
+
+
+func get_destination() -> Vector2:
+	return _destination
+
+
+func get_current_path() -> PackedVector2Array:
+	return _path.duplicate()
 
 
 func get_facing_direction() -> StringName:
 	return _facing_direction
+
+
+func _advance_reached_waypoints() -> void:
+	while (
+		_has_destination
+		and _path_index < _path.size()
+		and position.distance_to(_path[_path_index])
+		<= ARRIVAL_DISTANCE
+	):
+		_path_index += 1
+
+	if _has_destination and _path_index >= _path.size():
+		_has_destination = false
+		velocity = Vector2.ZERO
 
 
 func _update_facing_direction(input_vector: Vector2) -> void:

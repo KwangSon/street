@@ -41,12 +41,12 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `project.godot` autoloads `GameManager` and `SaveManager`.
 - `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
-- `DayScreen` builds the gray Stage 01 map, mobile direction controls, player collision, fixed HUD, and bounded drag camera entirely from GDScript.
+- `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, and bounded drag camera entirely from GDScript.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
 - `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
 - Feature-local behavior such as movement, customer flow, station interaction, animation, and rendering belongs in focused scripts under `srcs/`, not in the autoloads.
-- Gameplay movement is touch-only. Desktop testing uses held mouse clicks on the direction buttons and mouse dragging in the play area; do not add keyboard movement.
+- Gameplay movement is touch-only. A tap sets a world destination and a drag moves the camera. Desktop testing uses mouse clicks and drags; do not add keyboard movement.
 
 ## Code-First Rules
 

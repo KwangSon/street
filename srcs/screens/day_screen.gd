@@ -6,6 +6,9 @@ signal screen_change_requested
 const DayPlayerScript: Script = preload(
 	"res://srcs/day/day_player.gd"
 )
+const DayNavigationScript: Script = preload(
+	"res://srcs/day/day_navigation.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -14,31 +17,13 @@ const PLAYER_START_POSITION: Vector2 = Vector2(360.0, 620.0)
 const DRAG_THRESHOLD: float = 8.0
 
 const HUD_HEIGHT: float = 112.0
-const PLAY_AREA_BOTTOM: float = 912.0
-const DIRECTION_BUTTON_SIZE: Vector2 = Vector2(104.0, 104.0)
 const MOUSE_POINTER_ID: int = -1
 const NO_POINTER_ID: int = -2
-
-const DIRECTION_UP: StringName = &"up"
-const DIRECTION_DOWN: StringName = &"down"
-const DIRECTION_LEFT: StringName = &"left"
-const DIRECTION_RIGHT: StringName = &"right"
-const POINTER_ROLE_CAMERA: StringName = &"camera"
 
 const MAP_COLOR: Color = Color("b9b7ad")
 const GRID_COLOR: Color = Color("aaa89f")
 const HUD_COLOR: Color = Color("35291f")
 const HUD_TEXT_COLOR: Color = Color("fff4d6")
-const BUTTON_COLOR: Color = Color("d7c2a3")
-const BUTTON_ACTIVE_COLOR: Color = Color("f0a85b")
-const BUTTON_TEXT_COLOR: Color = Color("35291f")
-
-const DIRECTION_VECTORS: Dictionary = {
-	DIRECTION_UP: Vector2.UP,
-	DIRECTION_DOWN: Vector2.DOWN,
-	DIRECTION_LEFT: Vector2.LEFT,
-	DIRECTION_RIGHT: Vector2.RIGHT,
-}
 
 const FACILITIES: Array[Dictionary] = [
 	{
@@ -110,19 +95,11 @@ const FACILITIES: Array[Dictionary] = [
 var _world: Node2D
 var _player: DayPlayer
 var _camera: Camera2D
-var _direction_button_rects: Dictionary = {}
-var _direction_button_nodes: Dictionary = {}
-var _pointer_roles: Dictionary = {}
-var _direction_pointer_counts: Dictionary = {
-	DIRECTION_UP: 0,
-	DIRECTION_DOWN: 0,
-	DIRECTION_LEFT: 0,
-	DIRECTION_RIGHT: 0,
-}
-var _camera_pointer_id: int = NO_POINTER_ID
-var _camera_drag_start: Vector2 = Vector2.ZERO
-var _camera_drag_last: Vector2 = Vector2.ZERO
-var _camera_drag_active: bool = false
+var _navigation: DayNavigation
+var _active_pointer_id: int = NO_POINTER_ID
+var _gesture_start: Vector2 = Vector2.ZERO
+var _gesture_last: Vector2 = Vector2.ZERO
+var _gesture_is_drag: bool = false
 
 
 func _ready() -> void:
@@ -135,9 +112,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	if _player != null:
-		_player.set_movement_input(Vector2.ZERO)
-	_pointer_roles.clear()
-	_reset_direction_counts()
+		_player.clear_path()
+	_active_pointer_id = NO_POINTER_ID
 
 
 func _input(event: InputEvent) -> void:
@@ -145,13 +121,20 @@ func _input(event: InputEvent) -> void:
 		var touch_event: InputEventScreenTouch = event
 		if touch_event.pressed:
 			_begin_pointer(touch_event.index, touch_event.position)
+			if _active_pointer_id == touch_event.index:
+				get_viewport().set_input_as_handled()
 		else:
-			_end_pointer(touch_event.index)
-		get_viewport().set_input_as_handled()
+			var was_active_touch: bool = (
+				_active_pointer_id == touch_event.index
+			)
+			_end_pointer(touch_event.index, touch_event.position)
+			if was_active_touch:
+				get_viewport().set_input_as_handled()
 	elif event is InputEventScreenDrag:
 		var drag_event: InputEventScreenDrag = event
-		_move_pointer(drag_event.index, drag_event.position)
-		get_viewport().set_input_as_handled()
+		if _active_pointer_id == drag_event.index:
+			_move_pointer(drag_event.index, drag_event.position)
+			get_viewport().set_input_as_handled()
 	elif (
 		event is InputEventMouseButton
 		and event.button_index == MOUSE_BUTTON_LEFT
@@ -159,11 +142,17 @@ func _input(event: InputEvent) -> void:
 		var mouse_button: InputEventMouseButton = event
 		if mouse_button.pressed:
 			_begin_pointer(MOUSE_POINTER_ID, mouse_button.position)
+			if _active_pointer_id == MOUSE_POINTER_ID:
+				get_viewport().set_input_as_handled()
 		else:
-			_end_pointer(MOUSE_POINTER_ID)
-		get_viewport().set_input_as_handled()
+			var was_active_mouse: bool = (
+				_active_pointer_id == MOUSE_POINTER_ID
+			)
+			_end_pointer(MOUSE_POINTER_ID, mouse_button.position)
+			if was_active_mouse:
+				get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		if _pointer_roles.has(MOUSE_POINTER_ID):
+		if _active_pointer_id == MOUSE_POINTER_ID:
 			var mouse_motion: InputEventMouseMotion = event
 			_move_pointer(MOUSE_POINTER_ID, mouse_motion.position)
 			get_viewport().set_input_as_handled()
@@ -180,12 +169,29 @@ func get_stage_camera() -> Camera2D:
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
-		Vector2(VIEWPORT_SIZE.x, PLAY_AREA_BOTTOM - HUD_HEIGHT)
+		Vector2(VIEWPORT_SIZE.x, VIEWPORT_SIZE.y - HUD_HEIGHT)
 	)
 
 
-func get_direction_button_rect(direction: StringName) -> Rect2:
-	return _direction_button_rects.get(direction, Rect2())
+func screen_to_world(screen_position: Vector2) -> Vector2:
+	return (
+		_camera.position
+		+ screen_position
+		- VIEWPORT_SIZE * 0.5
+	)
+
+
+func request_player_move_to_world(
+	world_destination: Vector2
+) -> bool:
+	var path: PackedVector2Array = _navigation.find_path(
+		_player.position,
+		world_destination
+	)
+	if path.is_empty():
+		_player.clear_path()
+		return false
+	return _player.follow_path(path)
 
 
 func _build_world() -> void:
@@ -213,6 +219,13 @@ func _build_world() -> void:
 	_camera.limit_bottom = int(MAP_SIZE.y)
 	_camera.enabled = true
 	_world.add_child(_camera)
+
+	_navigation = DayNavigationScript.new()
+	_navigation.configure(
+		MAP_SIZE,
+		DayPlayer.COLLISION_RADIUS,
+		_get_navigation_obstacle_rects()
+	)
 
 
 func _add_map_background() -> void:
@@ -311,6 +324,21 @@ func _add_facility(facility: Dictionary) -> void:
 		)
 
 
+func _get_navigation_obstacle_rects() -> Array[Rect2]:
+	var obstacle_rects: Array[Rect2] = []
+	for facility: Dictionary in FACILITIES:
+		if not bool(facility["collision"]):
+			continue
+		var facility_size: Vector2 = facility["size"]
+		obstacle_rects.append(
+			Rect2(
+				Vector2(facility["position"]) - facility_size * 0.5,
+				facility_size
+			)
+		)
+	return obstacle_rects
+
+
 func _add_static_collision(
 	body_name: String,
 	body_position: Vector2,
@@ -347,37 +375,6 @@ func _build_fixed_ui() -> void:
 	add_child(fixed_ui)
 
 	_add_hud(fixed_ui)
-
-	var controls: Control = Control.new()
-	controls.name = "DirectionButtons"
-	controls.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fixed_ui.add_child(controls)
-
-	_add_direction_button(
-		controls,
-		DIRECTION_UP,
-		Rect2(Vector2(120.0, 930.0), DIRECTION_BUTTON_SIZE),
-		"▲"
-	)
-	_add_direction_button(
-		controls,
-		DIRECTION_LEFT,
-		Rect2(Vector2(16.0, 1040.0), DIRECTION_BUTTON_SIZE),
-		"◀"
-	)
-	_add_direction_button(
-		controls,
-		DIRECTION_DOWN,
-		Rect2(Vector2(120.0, 1040.0), DIRECTION_BUTTON_SIZE),
-		"▼"
-	)
-	_add_direction_button(
-		controls,
-		DIRECTION_RIGHT,
-		Rect2(Vector2(224.0, 1040.0), DIRECTION_BUTTON_SIZE),
-		"▶"
-	)
 
 
 func _add_hud(fixed_ui: CanvasLayer) -> void:
@@ -450,130 +447,44 @@ func _add_hud_label(
 	parent.add_child(label)
 
 
-func _add_direction_button(
-	parent: Control,
-	direction: StringName,
-	button_rect: Rect2,
-	button_text: String
-) -> void:
-	_direction_button_rects[direction] = button_rect
-
-	var button: ColorRect = ColorRect.new()
-	button.name = "%sButton" % String(direction).capitalize()
-	button.position = button_rect.position
-	button.size = button_rect.size
-	button.color = BUTTON_COLOR
-	button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(button)
-	_direction_button_nodes[direction] = button
-
-	var label: Label = Label.new()
-	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	label.text = button_text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_color_override("font_color", BUTTON_TEXT_COLOR)
-	label.add_theme_font_size_override("font_size", 42)
-	button.add_child(label)
-
-
 func _begin_pointer(pointer_id: int, position: Vector2) -> void:
-	if _pointer_roles.has(pointer_id):
+	if _active_pointer_id != NO_POINTER_ID:
 		return
-
-	var direction: StringName = _direction_at_position(position)
-	if direction != StringName():
-		_pointer_roles[pointer_id] = direction
-		_direction_pointer_counts[direction] = (
-			int(_direction_pointer_counts[direction]) + 1
-		)
-		_refresh_direction_button(direction)
-		_update_player_movement()
-		return
-
 	if not get_play_area_rect().has_point(position):
 		return
-	if _camera_pointer_id != NO_POINTER_ID:
-		return
 
-	_pointer_roles[pointer_id] = POINTER_ROLE_CAMERA
-	_camera_pointer_id = pointer_id
-	_camera_drag_start = position
-	_camera_drag_last = position
-	_camera_drag_active = false
+	_active_pointer_id = pointer_id
+	_gesture_start = position
+	_gesture_last = position
+	_gesture_is_drag = false
 
 
 func _move_pointer(pointer_id: int, position: Vector2) -> void:
-	if not _pointer_roles.has(pointer_id):
-		return
-	if _pointer_roles[pointer_id] != POINTER_ROLE_CAMERA:
+	if pointer_id != _active_pointer_id:
 		return
 
-	var movement: Vector2 = position - _camera_drag_last
-	_camera_drag_last = position
-	if not _camera_drag_active:
-		if position.distance_to(_camera_drag_start) < DRAG_THRESHOLD:
+	var movement: Vector2 = position - _gesture_last
+	_gesture_last = position
+	if not _gesture_is_drag:
+		if position.distance_to(_gesture_start) < DRAG_THRESHOLD:
 			return
-		_camera_drag_active = true
+		_gesture_is_drag = true
 
 	_camera.position = _clamp_camera_position(
 		_camera.position - movement
 	)
 
 
-func _end_pointer(pointer_id: int) -> void:
-	if not _pointer_roles.has(pointer_id):
+func _end_pointer(pointer_id: int, position: Vector2) -> void:
+	if pointer_id != _active_pointer_id:
 		return
 
-	var role: StringName = _pointer_roles[pointer_id]
-	_pointer_roles.erase(pointer_id)
-	if role == POINTER_ROLE_CAMERA:
-		_camera_pointer_id = NO_POINTER_ID
-		_camera_drag_active = false
+	var was_drag: bool = _gesture_is_drag
+	_active_pointer_id = NO_POINTER_ID
+	_gesture_is_drag = false
+	if was_drag or not get_play_area_rect().has_point(position):
 		return
-
-	_direction_pointer_counts[role] = maxi(
-		0,
-		int(_direction_pointer_counts[role]) - 1
-	)
-	_refresh_direction_button(role)
-	_update_player_movement()
-
-
-func _direction_at_position(position: Vector2) -> StringName:
-	for direction: StringName in DIRECTION_VECTORS:
-		var button_rect: Rect2 = _direction_button_rects[direction]
-		if button_rect.has_point(position):
-			return direction
-	return StringName()
-
-
-func _update_player_movement() -> void:
-	if _player == null:
-		return
-
-	var movement: Vector2 = Vector2.ZERO
-	for direction: StringName in DIRECTION_VECTORS:
-		if int(_direction_pointer_counts[direction]) > 0:
-			movement += DIRECTION_VECTORS[direction]
-	_player.set_movement_input(movement.limit_length(1.0))
-
-
-func _refresh_direction_button(direction: StringName) -> void:
-	var button: ColorRect = _direction_button_nodes.get(direction)
-	if button == null:
-		return
-	button.color = (
-		BUTTON_ACTIVE_COLOR
-		if int(_direction_pointer_counts[direction]) > 0
-		else BUTTON_COLOR
-	)
-
-
-func _reset_direction_counts() -> void:
-	for direction: StringName in DIRECTION_VECTORS:
-		_direction_pointer_counts[direction] = 0
+	request_player_move_to_world(screen_to_world(position))
 
 
 func _reset_camera() -> void:
