@@ -17,6 +17,7 @@
 현재 저장소는 게임 제작을 시작하기 위한 초기 골격이다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
+- `srcs/main.gd`: 부트스트랩 장면에 연결된 초기 스크립트
 - `srcs/globals/game_manager.gd`: 전역 게임 상태를 맡을 오토로드
 - `srcs/globals/save_manager.gd`: 저장과 복구를 맡을 오토로드
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
@@ -45,6 +46,7 @@ street/
 │   ├── globals/
 │   │   ├── game_manager.gd
 │   │   └── save_manager.gd
+│   ├── main.gd        # 부트스트랩 스크립트
 │   └── main.tscn      # 기존 부트스트랩 장면
 └── project.godot
 ```
@@ -93,6 +95,7 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 8. [07_mvp_scope.md](docs/07_mvp_scope.md) — 포함·제외 범위와 수용 기준
 9. [08_schedule.md](docs/08_schedule.md) — 10일 프로토타입과 후속 4주 일정
 10. [09_risks.md](docs/09_risks.md) — 위험, 조기 경보, 대응책
+11. [10_implementation_order.md](docs/10_implementation_order.md) — 코드 구현 순서와 근무일별 통과 조건
 
 ## 이번 버전의 확정 결정
 
@@ -100,9 +103,9 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 |---|---|
 | 장르 | 캐주얼 모바일 타이쿤 |
 | 배경 | 역사 고증 시뮬레이션이 아닌 밝은 에도 시대풍 |
-| 핵심 모티브 | Eatventure식 고정 화면, 직접 이동, 접근 자동 작업, 직원 자동화 |
-| 화면 | 세로형 고정 쿼터뷰 2D |
-| 조작 | 드래그/가상 조이스틱 이동, 작업은 접근 시 자동 |
+| 핵심 모티브 | Eatventure식 직접 이동, 접근 자동 작업, 직원 자동화 |
+| 화면 | 세로형 쿼터뷰 2D, 경계 안에서 수동 카메라 이동 |
+| 조작 | 터치 방향 버튼으로 이동, 플레이 영역 드래그로 카메라 이동, 작업은 접근 시 자동 |
 | 기술 | Godot 2D + Blender 프리렌더 PNG 스프라이트 |
 | 캐릭터 방향 | 4방향 |
 | 첫날 | 아침부터 준비된 재료로 바로 영업 |
