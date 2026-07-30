@@ -14,7 +14,7 @@
 
 ## 현재 구현 상태
 
-현재 저장소에는 실행·저장 로드, 낮 영업 전체 흐름과 정산, 새벽 시장 진입·구매·되돌리기까지 담당하는 코드 기반이 구현돼 있다.
+현재 저장소에는 실행·저장 로드, Day 1 낮 영업과 정산, 새벽 시장·배치 준비, Day 2 영업 전환까지 이어지는 P0 핵심 루프가 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
@@ -22,6 +22,7 @@
 - `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동, 드래그 카메라, 낮 영업 시설과 정산 한 화면
 - `srcs/screens/dawn_screen.gd`: 코드 기반 새벽 시장, 탭 이동, 구매 패드와 구매 되돌리기
 - `srcs/dawn/dawn_purchase_pad.gd`: 1초마다 쌀·고등어 5인분 묶음을 구매하는 패드
+- `srcs/dawn/dawn_preparation_station.gd`: 쌀·고등어 배치의 순차 1초 준비 시설
 - `srcs/day/day_customer.gd`: 손님의 좌석 이동과 주문 말풍선
 - `srcs/day/day_customer_manager.gd`: 손님 생성, 좌석 예약, 최대 3명 FIFO 대기열과 고등어 주문 생성
 - `srcs/day/day_customer_order_target.gd`: 손님 접근 시 주문 한 건 수령
@@ -49,7 +50,8 @@
 - 진행 중인 주문·접시·결제가 모두 끝나면 매출, 판매량, 이탈, 남은 재료와 폐기 원가를 확정하고 한 화면 정산을 표시한다.
 - 정산의 다음 단계 버튼은 `state["screen"]="dawn"`으로 바꾸고 Main이 `DawnScreen`을 생성한다.
 - 새벽 시장에서는 쌀 5인분을 4문, 고등어 5인분을 6문에 반복 구매하며 준비 확정 전에는 이번 구매를 전액 되돌릴 수 있다.
-- 새벽 배치 준비와 Day 2 전환은 아직 구현하지 않아 준비 버튼을 비활성화한 상태다.
+- 구매 확정 후 쌀은 `쌀가마 → 씻기 → 밥 짓기 → 밥통`, 고등어는 `생선 상자 → 세척 → 손질 → 얼음 상자` 순으로 배치 전체를 준비한다.
+- 두 배치를 각각 5인분 이상 완료하면 Day 2, 5분 영업 상태를 JSON에 저장하고 인자 없는 화면 전환 신호로 `DayScreen`을 다시 생성한다.
 
 ## 개발 원칙
 
@@ -73,6 +75,7 @@ street/
 ├── docs/              # 확정 기획과 수용 기준
 ├── srcs/
 │   ├── dawn/
+│   │   ├── dawn_preparation_station.gd
 │   │   └── dawn_purchase_pad.gd
 │   ├── day/
 │   │   ├── day_customer.gd

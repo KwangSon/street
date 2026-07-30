@@ -256,6 +256,82 @@ func test_market_purchase_rejects_non_market_phase() -> void:
 	assert_eq(GameManager.state["currency"], 10)
 
 
+func test_dawn_preparation_requires_order_and_starts_day_two() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["screen"] = GameManager.SCREEN_DAWN
+	GameManager.state["phase"] = GameManager.PHASE_MARKET
+	GameManager.state["currency"] = 10
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 0,
+		"mackerel": 0,
+		"egg": 0,
+	}
+	GameManager.state["inventory"]["raw"] = {
+		"rice": 0,
+		"mackerel": 0,
+		"egg": 0,
+	}
+	GameManager.state["progression"]["seats"] = 2
+	GameManager.ensure_dawn_runtime_state()
+	assert_true(GameManager.try_purchase_market_bundle("rice"))
+	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
+
+	assert_true(GameManager.can_confirm_market_purchases())
+	assert_true(GameManager.confirm_market_purchases())
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_PREP)
+	assert_false(GameManager.refund_market_purchases())
+	assert_false(
+		GameManager.try_complete_dawn_prep_step("rice", 1)
+	)
+
+	for step_index: int in range(4):
+		assert_true(
+			GameManager.try_complete_dawn_prep_step(
+				"rice",
+				step_index
+			)
+		)
+	for step_index: int in range(4):
+		assert_true(
+			GameManager.try_complete_dawn_prep_step(
+				"mackerel",
+				step_index
+			)
+		)
+
+	assert_eq(
+		GameManager.get_dawn_prepared(),
+		{
+			"rice": 5,
+			"mackerel": 5,
+		}
+	)
+	assert_eq(GameManager.state["inventory"]["raw"]["rice"], 0)
+	assert_eq(
+		GameManager.state["inventory"]["raw"]["mackerel"],
+		0
+	)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 5)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		5
+	)
+	assert_true(GameManager.can_finish_dawn_preparation())
+	assert_true(GameManager.complete_dawn_and_start_day())
+	assert_eq(GameManager.state["day"], 2)
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAY)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
+	assert_eq(GameManager.state["service_time_remaining"], 300.0)
+	assert_eq(GameManager.state["progression"]["seats"], 2)
+	assert_eq(GameManager.state["day_stats"]["revenue"], 0)
+	assert_true(GameManager.state["day_runtime"]["customers"].is_empty())
+	assert_true(
+		GameManager.state["day_runtime"]["accepting_customers"]
+	)
+	assert_false(GameManager.state.has("dawn_runtime"))
+	assert_false(GameManager.complete_dawn_and_start_day())
+
+
 func test_settlement_waits_until_existing_order_is_cleared() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var customer_id: String = GameManager.create_day_customer()

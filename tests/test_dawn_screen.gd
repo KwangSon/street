@@ -3,6 +3,7 @@ extends GutTest
 const DawnScreenScript: Script = preload(
 	"res://srcs/screens/dawn_screen.gd"
 )
+const TEST_PATH: String = "user://street_test_dawn.json"
 
 
 func before_each() -> void:
@@ -16,10 +17,12 @@ func before_each() -> void:
 		"egg": 0,
 	}
 	GameManager.ensure_dawn_runtime_state()
+	_cleanup_test_files()
 
 
 func after_each() -> void:
 	GameManager.state = {}
+	_cleanup_test_files()
 
 
 func test_signal_has_no_arguments() -> void:
@@ -48,6 +51,9 @@ func test_builds_portrait_market_with_two_purchase_pads() -> void:
 		screen.get_node(
 			"FixedUI/ActionPanel/PrepareButton"
 		).disabled
+	)
+	assert_false(
+		screen.get_preparation_station("rice", 0).visible
 	)
 
 
@@ -135,8 +141,96 @@ func test_refund_button_restores_all_market_purchases() -> void:
 	)
 
 
+func test_prepare_button_confirms_market_and_saves_checkpoint() -> void:
+	var screen: DawnScreen = await _create_screen()
+	assert_true(GameManager.try_purchase_market_bundle("rice"))
+	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
+	assert_false(screen.get_prepare_button().disabled)
+
+	screen.get_prepare_button().pressed.emit()
+
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_PREP)
+	assert_false(screen.get_rice_purchase_pad().visible)
+	assert_false(screen.get_mackerel_purchase_pad().visible)
+	assert_true(screen.get_preparation_station("rice", 0).visible)
+	assert_false(screen.get_refund_button().visible)
+	assert_eq(screen.get_prepare_button().text, "준비 완료 · Day 시작")
+	assert_true(screen.get_prepare_button().disabled)
+	assert_true(FileAccess.file_exists(TEST_PATH))
+	var loaded_result: Dictionary = SaveManager.load_game_state(TEST_PATH)
+	assert_eq(loaded_result["status"], SaveManager.LoadStatus.OK)
+	assert_eq(
+		loaded_result["state"]["phase"],
+		GameManager.PHASE_PREP
+	)
+
+
+func test_preparation_stations_enforce_order_and_start_day_two() -> void:
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 0,
+		"mackerel": 0,
+		"egg": 0,
+	}
+	assert_true(GameManager.try_purchase_market_bundle("rice"))
+	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
+	assert_true(GameManager.confirm_market_purchases())
+	var screen: DawnScreen = await _create_screen()
+	var player: DayPlayer = screen.get_player()
+
+	var wrong_station: DawnPreparationStation = (
+		screen.get_preparation_station("rice", 1)
+	)
+	wrong_station.interaction_entered(player)
+	wrong_station.interaction_tick(player, 1.1)
+	assert_eq(GameManager.get_dawn_prep_next_step("rice"), 0)
+
+	for material_id: String in ["rice", "mackerel"]:
+		for step_index: int in range(4):
+			var station: DawnPreparationStation = (
+				screen.get_preparation_station(
+					material_id,
+					step_index
+				)
+			)
+			station.interaction_entered(player)
+			station.interaction_tick(player, 1.1)
+			assert_eq(
+				GameManager.get_dawn_prep_next_step(
+					material_id
+				),
+				step_index + 1
+			)
+
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 5)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		5
+	)
+	assert_false(screen.get_prepare_button().disabled)
+	watch_signals(screen)
+
+	screen.get_prepare_button().pressed.emit()
+
+	assert_eq(GameManager.state["day"], 2)
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAY)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
+	assert_signal_emitted(screen, "screen_change_requested")
+	assert_true(FileAccess.file_exists(TEST_PATH))
+	var loaded_result: Dictionary = SaveManager.load_game_state(TEST_PATH)
+	assert_eq(loaded_result["status"], SaveManager.LoadStatus.OK)
+	assert_eq(int(loaded_result["state"]["day"]), 2)
+	assert_eq(
+		int(
+			loaded_result["state"]["inventory"]["ready"]["rice"]
+		),
+		5
+	)
+	assert_false(loaded_result["state"].has("dawn_runtime"))
+
+
 func _create_screen() -> DawnScreen:
 	var screen: DawnScreen = DawnScreenScript.new()
+	screen.save_path = TEST_PATH
 	add_child_autofree(screen)
 	await wait_process_frames(1)
 	return screen
@@ -162,3 +256,14 @@ func _touch_drag_event(
 	event.index = pointer_id
 	event.position = position
 	return event
+
+
+func _cleanup_test_files() -> void:
+	_remove_file(TEST_PATH)
+	_remove_file(TEST_PATH + SaveManager.TEMP_SUFFIX)
+	_remove_file(TEST_PATH + SaveManager.CORRUPT_SUFFIX)
+
+
+func _remove_file(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

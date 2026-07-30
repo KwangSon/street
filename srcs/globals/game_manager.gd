@@ -135,20 +135,7 @@ func create_default_game_state() -> Dictionary:
 			"stage_completed": false,
 		},
 		"day_runtime": _create_default_day_runtime(),
-		"day_stats": {
-			"plates_sold": {
-				"mackerel": 0,
-				"egg": 0,
-			},
-			"revenue": 0,
-			"departed_customers": 0,
-			"waste": {
-				"rice": 0,
-				"mackerel": 0,
-				"egg": 0,
-			},
-			"waste_cost": 0.0,
-		},
+		"day_stats": _create_default_day_stats(),
 		"totals": {
 			"plates_sold": {
 				"mackerel": 0,
@@ -383,6 +370,12 @@ func get_market_bundle(material_id: String) -> Dictionary:
 
 
 func get_market_purchases() -> Dictionary:
+	if String(state.get("screen", "")) != SCREEN_DAWN:
+		return {
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		}
 	_ensure_dawn_runtime_state()
 	return Dictionary(
 		state["dawn_runtime"]["purchased"]
@@ -449,6 +442,124 @@ func refund_market_purchases() -> bool:
 	state["currency"] = int(state.get("currency", 0)) + spent
 	dawn_runtime["spent"] = 0
 	state_changed.emit()
+	return true
+
+
+func can_confirm_market_purchases() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAWN
+		or String(state.get("phase", "")) != PHASE_MARKET
+	):
+		return false
+	var raw_inventory: Dictionary = _get_raw_inventory()
+	return (
+		int(raw_inventory.get("rice", 0)) >= 5
+		and int(raw_inventory.get("mackerel", 0)) >= 5
+	)
+
+
+func confirm_market_purchases() -> bool:
+	if not can_confirm_market_purchases():
+		return false
+	_ensure_dawn_runtime_state()
+	state["dawn_runtime"]["market_confirmed"] = true
+	state["phase"] = PHASE_PREP
+	state_changed.emit()
+	return true
+
+
+func get_dawn_prep_next_step(material_id: String) -> int:
+	if String(state.get("screen", "")) != SCREEN_DAWN:
+		return 0
+	_ensure_dawn_runtime_state()
+	var prep_steps: Dictionary = state["dawn_runtime"]["prep_steps"]
+	return int(prep_steps.get(material_id, 0))
+
+
+func get_dawn_prepared() -> Dictionary:
+	if String(state.get("screen", "")) != SCREEN_DAWN:
+		return {
+			"rice": 0,
+			"mackerel": 0,
+		}
+	_ensure_dawn_runtime_state()
+	return Dictionary(
+		state["dawn_runtime"]["prepared"]
+	).duplicate(true)
+
+
+func try_complete_dawn_prep_step(
+	material_id: String,
+	step_index: int
+) -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAWN
+		or String(state.get("phase", "")) != PHASE_PREP
+		or material_id not in ["rice", "mackerel"]
+		or step_index < 0
+		or step_index >= 4
+	):
+		return false
+	_ensure_dawn_runtime_state()
+	var dawn_runtime: Dictionary = state["dawn_runtime"]
+	var prep_steps: Dictionary = dawn_runtime["prep_steps"]
+	if int(prep_steps.get(material_id, 0)) != step_index:
+		return false
+	var raw_inventory: Dictionary = _get_raw_inventory()
+	var raw_amount: int = int(raw_inventory.get(material_id, 0))
+	if raw_amount <= 0:
+		return false
+	var ready_inventory: Dictionary = {}
+	if step_index == 3:
+		ready_inventory = _get_ready_inventory()
+		if ready_inventory.is_empty():
+			return false
+
+	prep_steps[material_id] = step_index + 1
+	if step_index == 3:
+		ready_inventory[material_id] = (
+			int(ready_inventory.get(material_id, 0))
+			+ raw_amount
+		)
+		raw_inventory[material_id] = 0
+		dawn_runtime["prepared"][material_id] = (
+			int(
+				dawn_runtime["prepared"].get(
+					material_id,
+					0
+				)
+			)
+			+ raw_amount
+		)
+	state_changed.emit()
+	return true
+
+
+func can_finish_dawn_preparation() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAWN
+		or String(state.get("phase", "")) != PHASE_PREP
+	):
+		return false
+	var prepared: Dictionary = get_dawn_prepared()
+	return (
+		int(prepared.get("rice", 0)) >= 5
+		and int(prepared.get("mackerel", 0)) >= 5
+	)
+
+
+func complete_dawn_and_start_day() -> bool:
+	if not can_finish_dawn_preparation():
+		return false
+	state["day"] = int(state.get("day", 1)) + 1
+	state["screen"] = SCREEN_DAY
+	state["phase"] = PHASE_SERVICE
+	state["service_time_remaining"] = 300.0
+	state["day_runtime"] = _create_default_day_runtime()
+	state["day_stats"] = _create_default_day_stats()
+	state.erase("dawn_runtime")
+	state_changed.emit()
+	service_time_changed.emit(300.0)
 	return true
 
 
@@ -1302,6 +1413,14 @@ func _create_default_dawn_runtime() -> Dictionary:
 		},
 		"spent": 0,
 		"market_confirmed": false,
+		"prep_steps": {
+			"rice": 0,
+			"mackerel": 0,
+		},
+		"prepared": {
+			"rice": 0,
+			"mackerel": 0,
+		},
 	}
 
 
@@ -1360,7 +1479,64 @@ func _ensure_dawn_runtime_state() -> bool:
 	elif typeof(dawn_runtime["market_confirmed"]) != TYPE_BOOL:
 		dawn_runtime["market_confirmed"] = false
 		changed = true
+
+	for dictionary_key: String in ["prep_steps", "prepared"]:
+		var dictionary_value: Variant = dawn_runtime.get(
+			dictionary_key,
+			{}
+		)
+		if not dictionary_value is Dictionary:
+			dictionary_value = {}
+			changed = true
+		var normalized_dictionary: Dictionary = dictionary_value
+		for material_id: String in ["rice", "mackerel"]:
+			var normalized_value: int = maxi(
+				0,
+				int(
+					normalized_dictionary.get(
+						material_id,
+						0
+					)
+				)
+			)
+			if dictionary_key == "prep_steps":
+				normalized_value = mini(normalized_value, 4)
+			if (
+				not normalized_dictionary.has(material_id)
+				or int(
+					normalized_dictionary.get(material_id, 0)
+				)
+				!= normalized_value
+			):
+				normalized_dictionary[material_id] = (
+					normalized_value
+				)
+				changed = true
+		if (
+			not dawn_runtime.has(dictionary_key)
+			or dawn_runtime[dictionary_key]
+			!= normalized_dictionary
+		):
+			dawn_runtime[dictionary_key] = normalized_dictionary
+			changed = true
 	return changed
+
+
+func _create_default_day_stats() -> Dictionary:
+	return {
+		"plates_sold": {
+			"mackerel": 0,
+			"egg": 0,
+		},
+		"revenue": 0,
+		"departed_customers": 0,
+		"waste": {
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		},
+		"waste_cost": 0.0,
+	}
 
 
 func _create_default_day_runtime() -> Dictionary:

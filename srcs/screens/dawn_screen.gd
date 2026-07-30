@@ -12,6 +12,9 @@ const DayInteractionControllerScript: Script = preload(
 const DawnPurchasePadScript: Script = preload(
 	"res://srcs/dawn/dawn_purchase_pad.gd"
 )
+const DawnPreparationStationScript: Script = preload(
+	"res://srcs/dawn/dawn_preparation_station.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const HUD_HEIGHT: float = 112.0
@@ -25,16 +28,70 @@ const FLOOR_COLOR: Color = Color("b8a98f")
 const HUD_COLOR: Color = Color("252b35")
 const TEXT_COLOR: Color = Color("fff4d6")
 const PLAYER_START_POSITION: Vector2 = Vector2(360.0, 820.0)
+const PREPARATION_STATIONS: Array[Dictionary] = [
+	{
+		"material": "rice",
+		"step": 0,
+		"label": "쌀가마",
+		"position": Vector2(90.0, 350.0),
+	},
+	{
+		"material": "rice",
+		"step": 1,
+		"label": "쌀 씻기",
+		"position": Vector2(270.0, 350.0),
+	},
+	{
+		"material": "rice",
+		"step": 2,
+		"label": "밥 짓기",
+		"position": Vector2(450.0, 350.0),
+	},
+	{
+		"material": "rice",
+		"step": 3,
+		"label": "밥통",
+		"position": Vector2(630.0, 350.0),
+	},
+	{
+		"material": "mackerel",
+		"step": 0,
+		"label": "생선 상자",
+		"position": Vector2(90.0, 700.0),
+	},
+	{
+		"material": "mackerel",
+		"step": 1,
+		"label": "세척대",
+		"position": Vector2(270.0, 700.0),
+	},
+	{
+		"material": "mackerel",
+		"step": 2,
+		"label": "손질대",
+		"position": Vector2(450.0, 700.0),
+	},
+	{
+		"material": "mackerel",
+		"step": 3,
+		"label": "얼음 상자",
+		"position": Vector2(630.0, 700.0),
+	},
+]
 
+var save_path: String = SaveManager.SAVE_PATH
 var _world: Node2D
 var _player: DayPlayer
 var _interaction_controller: DayInteractionController
 var _rice_purchase_pad: DawnPurchasePad
 var _mackerel_purchase_pad: DawnPurchasePad
+var _preparation_stations: Dictionary = {}
+var _title_label: Label
 var _currency_label: Label
 var _purchase_label: Label
 var _status_label: Label
 var _refund_button: Button
+var _prepare_button: Button
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -105,6 +162,19 @@ func get_refund_button() -> Button:
 	return _refund_button
 
 
+func get_prepare_button() -> Button:
+	return _prepare_button
+
+
+func get_preparation_station(
+	material_id: String,
+	step_index: int
+) -> DawnPreparationStation:
+	return _preparation_stations.get(
+		"%s_%d" % [material_id, step_index]
+	) as DawnPreparationStation
+
+
 func request_player_move(screen_position: Vector2) -> bool:
 	if not _is_play_position(screen_position):
 		return false
@@ -166,6 +236,29 @@ func _build_world() -> void:
 	_mackerel_purchase_pad.position = Vector2(510.0, 480.0)
 	_world.add_child(_mackerel_purchase_pad)
 
+	for station_data: Dictionary in PREPARATION_STATIONS:
+		var station: DawnPreparationStation = (
+			DawnPreparationStationScript.new()
+		)
+		var material_id: String = String(
+			station_data["material"]
+		)
+		var step_index: int = int(station_data["step"])
+		station.configure(
+			material_id,
+			step_index,
+			String(station_data["label"])
+		)
+		station.name = "%sPrep%d" % [
+			material_id.capitalize(),
+			step_index,
+		]
+		station.position = station_data["position"]
+		_preparation_stations[
+			"%s_%d" % [material_id, step_index]
+		] = station
+		_world.add_child(station)
+
 	_player = DayPlayerScript.new()
 	_player.position = PLAYER_START_POSITION
 	_world.add_child(_player)
@@ -181,6 +274,10 @@ func _build_world() -> void:
 	_interaction_controller.register_interactable(
 		_mackerel_purchase_pad
 	)
+	for station_value: Variant in _preparation_stations.values():
+		_interaction_controller.register_interactable(
+			station_value as DawnPreparationStation
+		)
 	_world.add_child(_interaction_controller)
 
 
@@ -197,7 +294,7 @@ func _build_fixed_ui() -> void:
 	hud.mouse_filter = Control.MOUSE_FILTER_STOP
 	fixed_ui.add_child(hud)
 
-	var title_label: Label = _add_label(
+	_title_label = _add_label(
 		hud,
 		"TitleLabel",
 		"Day %d 새벽 시장" % (
@@ -207,7 +304,7 @@ func _build_fixed_ui() -> void:
 		26,
 		HORIZONTAL_ALIGNMENT_LEFT
 	)
-	title_label.add_theme_color_override("font_color", TEXT_COLOR)
+	_title_label.add_theme_color_override("font_color", TEXT_COLOR)
 	_currency_label = _add_label(
 		hud,
 		"CurrencyLabel",
@@ -257,14 +354,15 @@ func _build_fixed_ui() -> void:
 	_refund_button.pressed.connect(_on_refund_pressed)
 	action_panel.add_child(_refund_button)
 
-	var prepare_button: Button = Button.new()
-	prepare_button.name = "PrepareButton"
-	prepare_button.position = Vector2(388.0, 104.0)
-	prepare_button.size = Vector2(290.0, 82.0)
-	prepare_button.text = "준비 단계 구현 중"
-	prepare_button.disabled = true
-	prepare_button.add_theme_font_size_override("font_size", 21)
-	action_panel.add_child(prepare_button)
+	_prepare_button = Button.new()
+	_prepare_button.name = "PrepareButton"
+	_prepare_button.position = Vector2(388.0, 104.0)
+	_prepare_button.size = Vector2(290.0, 82.0)
+	_prepare_button.text = "구매 완료"
+	_prepare_button.disabled = true
+	_prepare_button.add_theme_font_size_override("font_size", 21)
+	_prepare_button.pressed.connect(_on_prepare_pressed)
+	action_panel.add_child(_prepare_button)
 
 
 func _add_label(
@@ -341,23 +439,96 @@ func _on_refund_pressed() -> void:
 	_refresh_ui(false)
 
 
+func _on_prepare_pressed() -> void:
+	var phase: String = String(GameManager.state.get("phase", ""))
+	if phase == GameManager.PHASE_MARKET:
+		if not GameManager.confirm_market_purchases():
+			_status_label.text = (
+				"쌀과 고등어를 각각 5인분 이상 구매하세요."
+			)
+			return
+		_save_checkpoint()
+		_status_label.text = (
+			"쌀과 고등어 배치를 순서대로 준비하세요."
+		)
+		_refresh_ui(false)
+	elif phase == GameManager.PHASE_PREP:
+		if not GameManager.complete_dawn_and_start_day():
+			_status_label.text = (
+				"쌀과 고등어 준비를 모두 완료하세요."
+			)
+			return
+		_save_checkpoint()
+		screen_change_requested.emit()
+
+
+func _save_checkpoint() -> void:
+	var save_error: Error = SaveManager.save_game_state(
+		GameManager.state,
+		save_path
+	)
+	if save_error != OK:
+		push_error(
+			"Could not save dawn checkpoint: %s"
+			% error_string(save_error)
+		)
+
+
 func _refresh_ui(reset_status: bool = true) -> void:
 	if _currency_label == null:
 		return
+	if (
+		String(GameManager.state.get("screen", ""))
+		!= GameManager.SCREEN_DAWN
+	):
+		return
+	var phase: String = String(GameManager.state.get("phase", ""))
+	var is_market: bool = phase == GameManager.PHASE_MARKET
+	var is_prep: bool = phase == GameManager.PHASE_PREP
 	var purchases: Dictionary = GameManager.get_market_purchases()
+	var prepared: Dictionary = GameManager.get_dawn_prepared()
+	_title_label.text = "Day %d 새벽 %s" % [
+		int(GameManager.state.get("day", 1)) + 1,
+		"시장" if is_market else "준비",
+	]
 	_currency_label.text = "%d문" % int(
 		GameManager.state.get("currency", 0)
 	)
-	_purchase_label.text = "구매: 쌀 %d · 고등어 %d" % [
-		int(purchases.get("rice", 0)),
-		int(purchases.get("mackerel", 0)),
-	]
+	_purchase_label.text = (
+		"구매: 쌀 %d · 고등어 %d" % [
+			int(purchases.get("rice", 0)),
+			int(purchases.get("mackerel", 0)),
+		]
+		if is_market
+		else "준비 완료: 밥 %d · 고등어 %d" % [
+			int(prepared.get("rice", 0)),
+			int(prepared.get("mackerel", 0)),
+		]
+	)
 	var total_purchased: int = (
 		int(purchases.get("rice", 0))
 		+ int(purchases.get("mackerel", 0))
 	)
+	_rice_purchase_pad.visible = is_market
+	_mackerel_purchase_pad.visible = is_market
+	for station_value: Variant in _preparation_stations.values():
+		var station: DawnPreparationStation = (
+			station_value as DawnPreparationStation
+		)
+		station.visible = is_prep
+	_refund_button.visible = is_market
 	_refund_button.disabled = total_purchased <= 0
+	_prepare_button.text = (
+		"구매 완료" if is_market else "준비 완료 · Day 시작"
+	)
+	_prepare_button.disabled = (
+		not GameManager.can_confirm_market_purchases()
+		if is_market
+		else not GameManager.can_finish_dawn_preparation()
+	)
 	if reset_status:
 		_status_label.text = (
 			"구매 패드에 머물면 1초마다 한 묶음을 삽니다."
+			if is_market
+			else "활성 시설에 1초 머물러 순서대로 준비하세요."
 		)
