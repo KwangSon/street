@@ -9,6 +9,12 @@ const DayPlayerScript: Script = preload(
 const DayNavigationScript: Script = preload(
 	"res://srcs/day/day_navigation.gd"
 )
+const DayInteractionControllerScript: Script = preload(
+	"res://srcs/day/day_interaction_controller.gd"
+)
+const MackerelStationScript: Script = preload(
+	"res://srcs/day/mackerel_station.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -96,6 +102,9 @@ var _world: Node2D
 var _player: DayPlayer
 var _camera: Camera2D
 var _navigation: DayNavigation
+var _interaction_controller: DayInteractionController
+var _mackerel_station: MackerelStation
+var _inventory_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -104,8 +113,13 @@ var _gesture_is_drag: bool = false
 
 func _ready() -> void:
 	name = "DayScreen"
+	GameManager.ensure_day_runtime_state()
 	_build_world()
 	_build_fixed_ui()
+	if not GameManager.state_changed.is_connected(
+		_on_game_state_changed
+	):
+		GameManager.state_changed.connect(_on_game_state_changed)
 	_reset_camera()
 	get_viewport().size_changed.connect(_on_viewport_size_changed)
 
@@ -166,6 +180,14 @@ func get_stage_camera() -> Camera2D:
 	return _camera
 
 
+func get_interaction_controller() -> DayInteractionController:
+	return _interaction_controller
+
+
+func get_mackerel_station() -> MackerelStation:
+	return _mackerel_station
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -208,6 +230,13 @@ func _build_world() -> void:
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
 	_player.position = PLAYER_START_POSITION
 	_world.add_child(_player)
+	_player.set_carried_item(GameManager.get_carried_item())
+
+	_interaction_controller = DayInteractionControllerScript.new()
+	_interaction_controller.name = "InteractionController"
+	_interaction_controller.configure(_player)
+	_interaction_controller.register_interactable(_mackerel_station)
+	_world.add_child(_interaction_controller)
 
 	_camera = Camera2D.new()
 	_camera.name = "StageCamera"
@@ -293,28 +322,41 @@ func _add_map_boundaries() -> void:
 
 
 func _add_facility(facility: Dictionary) -> void:
-	var facility_node: Node2D = Node2D.new()
+	var facility_node: Node2D
+	if String(facility["name"]) == "MackerelStation":
+		_mackerel_station = MackerelStationScript.new()
+		_mackerel_station.configure(
+			facility["size"],
+			facility["color"]
+		)
+		facility_node = _mackerel_station
+	else:
+		facility_node = Node2D.new()
 	facility_node.name = String(facility["name"])
 	facility_node.position = facility["position"]
 	_world.add_child(facility_node)
 
 	var facility_size: Vector2 = facility["size"]
-	var visual: Polygon2D = Polygon2D.new()
-	visual.name = "Visual"
-	visual.color = facility["color"]
-	visual.polygon = _rectangle_polygon(facility_size)
-	facility_node.add_child(visual)
+	if facility_node != _mackerel_station:
+		var visual: Polygon2D = Polygon2D.new()
+		visual.name = "Visual"
+		visual.color = facility["color"]
+		visual.polygon = _rectangle_polygon(facility_size)
+		facility_node.add_child(visual)
 
-	var label: Label = Label.new()
-	label.name = "Label"
-	label.position = -facility_size * 0.5
-	label.size = facility_size
-	label.text = String(facility["label"])
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_color", Color("35291f"))
-	label.add_theme_font_size_override("font_size", 18)
-	facility_node.add_child(label)
+		var label: Label = Label.new()
+		label.name = "Label"
+		label.position = -facility_size * 0.5
+		label.size = facility_size
+		label.text = String(facility["label"])
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_color_override(
+			"font_color",
+			Color("35291f")
+		)
+		label.add_theme_font_size_override("font_size", 18)
+		facility_node.add_child(label)
 
 	if bool(facility["collision"]):
 		_add_static_collision(
@@ -414,7 +456,7 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 		Rect2(516.0, 14.0, 180.0, 42.0),
 		HORIZONTAL_ALIGNMENT_RIGHT
 	)
-	_add_hud_label(
+	_inventory_label = _add_hud_label(
 		hud,
 		"InventoryLabel",
 		"밥 %d  |  고등어 %d" % [
@@ -434,7 +476,7 @@ func _add_hud_label(
 	label_rect: Rect2,
 	alignment: HorizontalAlignment,
 	font_size: int = 26
-) -> void:
+) -> Label:
 	var label: Label = Label.new()
 	label.name = label_name
 	label.position = label_rect.position
@@ -445,6 +487,7 @@ func _add_hud_label(
 	label.add_theme_color_override("font_color", HUD_TEXT_COLOR)
 	label.add_theme_font_size_override("font_size", font_size)
 	parent.add_child(label)
+	return label
 
 
 func _begin_pointer(pointer_id: int, position: Vector2) -> void:
@@ -514,6 +557,22 @@ func _on_viewport_size_changed() -> void:
 	if _camera == null:
 		return
 	_camera.position = _clamp_camera_position(_camera.position)
+
+
+func _on_game_state_changed() -> void:
+	_refresh_inventory_hud()
+	if _player != null:
+		_player.set_carried_item(GameManager.get_carried_item())
+
+
+func _refresh_inventory_hud() -> void:
+	if _inventory_label == null:
+		return
+	var ready_inventory: Dictionary = _get_ready_inventory()
+	_inventory_label.text = "밥 %d  |  고등어 %d" % [
+		int(ready_inventory.get("rice", 0)),
+		int(ready_inventory.get("mackerel", 0)),
+	]
 
 
 func _get_ready_inventory() -> Dictionary:

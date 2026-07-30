@@ -12,10 +12,14 @@ const FACING_RIGHT: StringName = &"right"
 
 const BODY_COLOR: Color = Color("d9783d")
 const DIRECTION_COLOR: Color = Color("fff4d6")
+const CARRIED_PLATE_COLOR: Color = Color("eef4f7")
+const CARRIED_MACKEREL_COLOR: Color = Color("557f9b")
 
 var move_speed: float = DEFAULT_MOVE_SPEED
 var _facing_direction: StringName = FACING_DOWN
 var _direction_marker: Polygon2D
+var _carried_item_visual: Node2D
+var _carried_item: Dictionary = {}
 var _path: PackedVector2Array = PackedVector2Array()
 var _path_index: int = 0
 var _destination: Vector2 = Vector2.ZERO
@@ -83,6 +87,15 @@ func get_current_path() -> PackedVector2Array:
 
 func get_facing_direction() -> StringName:
 	return _facing_direction
+
+
+func set_carried_item(item: Dictionary) -> void:
+	_carried_item = item.duplicate(true)
+	_refresh_carried_item_visual()
+
+
+func get_carried_item() -> Dictionary:
+	return _carried_item.duplicate(true)
 
 
 func _advance_reached_waypoints() -> void:
@@ -159,6 +172,39 @@ func _build_placeholder_visual() -> void:
 	name_label.add_theme_font_size_override("font_size", 18)
 	add_child(name_label)
 
+	_carried_item_visual = Node2D.new()
+	_carried_item_visual.name = "CarriedItem"
+	_carried_item_visual.position = Vector2(0.0, -58.0)
+	_carried_item_visual.z_index = 2
+	add_child(_carried_item_visual)
+
+	var plate: Polygon2D = Polygon2D.new()
+	plate.name = "Plate"
+	plate.color = CARRIED_PLATE_COLOR
+	plate.polygon = PackedVector2Array([
+		Vector2(-28.0, -8.0),
+		Vector2(28.0, -8.0),
+		Vector2(34.0, 0.0),
+		Vector2(28.0, 8.0),
+		Vector2(-28.0, 8.0),
+		Vector2(-34.0, 0.0),
+	])
+	_carried_item_visual.add_child(plate)
+
+	var mackerel: Polygon2D = Polygon2D.new()
+	mackerel.name = "Mackerel"
+	mackerel.color = CARRIED_MACKEREL_COLOR
+	mackerel.polygon = PackedVector2Array([
+		Vector2(-21.0, 0.0),
+		Vector2(-10.0, -8.0),
+		Vector2(15.0, -6.0),
+		Vector2(25.0, 0.0),
+		Vector2(15.0, 6.0),
+		Vector2(-10.0, 8.0),
+	])
+	_carried_item_visual.add_child(mackerel)
+	_refresh_carried_item_visual()
+
 
 func _update_direction_marker() -> void:
 	if _direction_marker == null:
@@ -173,3 +219,15 @@ func _update_direction_marker() -> void:
 			_direction_marker.rotation = PI
 		FACING_LEFT:
 			_direction_marker.rotation = -PI * 0.5
+
+
+func _refresh_carried_item_visual() -> void:
+	if _carried_item_visual == null:
+		return
+	_carried_item_visual.visible = (
+		String(_carried_item.get("kind", ""))
+		== GameManager.CARRIED_KIND_PLATE
+		and String(_carried_item.get("menu", ""))
+		== GameManager.MENU_MACKEREL
+		and int(_carried_item.get("count", 0)) > 0
+	)

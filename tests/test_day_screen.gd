@@ -32,8 +32,57 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_eq(DayScreen.MAP_SIZE, Vector2(1200.0, 1920.0))
 	assert_not_null(screen.get_node("World/Player"))
 	assert_not_null(screen.get_node("World/StageCamera"))
+	assert_not_null(screen.get_node("World/InteractionController"))
+	assert_not_null(screen.get_mackerel_station())
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
+
+
+func test_player_approach_starts_mackerel_crafting() -> void:
+	var screen: DayScreen = await _create_screen()
+	var station: MackerelStation = screen.get_mackerel_station()
+	screen.get_player().position = Vector2(
+		station.position.x,
+		station.position.y + 80.0
+	)
+
+	await wait_physics_frames(2)
+
+	assert_eq(
+		screen.get_interaction_controller().get_current_target(),
+		station
+	)
+	assert_true(station.is_crafting_reserved())
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 19)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		19
+	)
+	assert_eq(
+		screen.get_node(
+			"FixedUI/HUD/InventoryLabel"
+		).text,
+		"밥 19  |  고등어 19"
+	)
+
+
+func test_tapping_mackerel_station_walks_into_interaction_range() -> void:
+	var screen: DayScreen = await _create_screen()
+	var station: MackerelStation = screen.get_mackerel_station()
+
+	assert_true(
+		screen.request_player_move_to_world(station.position)
+	)
+	await wait_physics_frames(180)
+
+	assert_eq(
+		screen.get_interaction_controller().get_current_target(),
+		station
+	)
+	assert_lt(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		20
+	)
 
 
 func test_touch_tap_sets_world_destination() -> void:

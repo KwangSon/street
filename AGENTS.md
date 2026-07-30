@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, mackerel crafting, completed-plate pickup, and GUT coverage for this foundation.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -41,7 +41,9 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `project.godot` autoloads `GameManager` and `SaveManager`.
 - `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
-- `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, and bounded drag camera entirely from GDScript.
+- `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, bounded drag camera, interaction selection, and the mackerel station entirely from GDScript.
+- `DayInteractionController` chooses one nearby target by explicit priority and then distance. `MackerelStation` owns only its local craft progress; ingredient counts, completed plates, and the player's carried item remain in `GameManager.state`.
+- During daytime service, beginning one mackerel craft atomically consumes one prepared rice and one prepared mackerel. Do not add a separate daytime ingredient-hauling step; dawn preparation remains a separate later flow.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
 - `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
