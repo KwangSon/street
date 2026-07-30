@@ -142,6 +142,7 @@ func _build_visual() -> void:
 	_status_label.size = Vector2(176.0, 32.0)
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.add_theme_font_size_override("font_size", 15)
 	add_child(_status_label)
 
@@ -174,21 +175,33 @@ func _refresh_visual() -> void:
 	var currency: int = int(GameManager.state.get("currency", 0))
 	if completed:
 		_status_label.text = "제작 3.0초 · 판매 7문"
+		_status_label.add_theme_font_size_override("font_size", 15)
 		_status_label.add_theme_color_override(
 			"font_color",
 			TEXT_COLOR
+		)
+	elif GameManager.is_day_growth_purchase_reserve_blocked(
+		upgrade_cost
+	):
+		_status_label.text = GameManager.OPERATING_RESERVE_MESSAGE
+		_status_label.add_theme_font_size_override("font_size", 12)
+		_status_label.add_theme_color_override(
+			"font_color",
+			BLOCKED_COLOR
 		)
 	elif currency < upgrade_cost:
 		_status_label.text = "%d문 필요 · 보유 %d문" % [
 			upgrade_cost,
 			currency,
 		]
+		_status_label.add_theme_font_size_override("font_size", 15)
 		_status_label.add_theme_color_override(
 			"font_color",
 			BLOCKED_COLOR
 		)
 	else:
 		_status_label.text = "%d문 · 1초 머물기" % upgrade_cost
+		_status_label.add_theme_font_size_override("font_size", 15)
 		_status_label.add_theme_color_override(
 			"font_color",
 			TEXT_COLOR

@@ -438,7 +438,7 @@ func test_missing_rice_does_not_consume_mackerel() -> void:
 	)
 
 
-func test_mackerel_station_level_two_costs_twelve_once() -> void:
+func test_mackerel_upgrade_keeps_ten_mon_operating_reserve() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	GameManager.state["currency"] = 11
 
@@ -446,22 +446,30 @@ func test_mackerel_station_level_two_costs_twelve_once() -> void:
 	assert_eq(GameManager.get_mackerel_station_level(), 1)
 	assert_eq(GameManager.state["currency"], 11)
 
-	GameManager.state["currency"] = 12
+	GameManager.state["currency"] = 21
+	assert_true(
+		GameManager.is_day_growth_purchase_reserve_blocked(12)
+	)
+	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_eq(GameManager.get_mackerel_station_level(), 1)
+	assert_eq(GameManager.state["currency"], 21)
+
+	GameManager.state["currency"] = 22
 	assert_true(GameManager.try_purchase_mackerel_station_upgrade())
 	assert_eq(GameManager.get_mackerel_station_level(), 2)
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_eq(GameManager.get_mackerel_craft_duration(), 3.0)
 	assert_eq(GameManager.get_mackerel_sale_price(), 7)
 	assert_eq(GameManager.get_mackerel_upgrade_cost(), 0)
 
 	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
 	assert_eq(GameManager.get_mackerel_station_level(), 2)
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 
 
 func test_upgraded_station_order_pays_seven() -> void:
 	GameManager.state = GameManager.create_default_game_state()
-	GameManager.state["currency"] = 12
+	GameManager.state["currency"] = 22
 	assert_true(GameManager.try_purchase_mackerel_station_upgrade())
 	var customer_id: String = _create_ready_plate_order()
 
@@ -473,17 +481,17 @@ func test_upgraded_station_order_pays_seven() -> void:
 	assert_true(GameManager.mark_customer_finished_eating(customer_id))
 	assert_eq(GameManager.get_customer_payment(customer_id)["amount"], 7)
 	assert_true(GameManager.collect_customer_payment(customer_id))
-	assert_eq(GameManager.state["currency"], 7)
+	assert_eq(GameManager.state["currency"], 17)
 	assert_eq(GameManager.state["day_stats"]["revenue"], 7)
 
 
 func test_upgrade_rejects_missing_progression_data() -> void:
 	GameManager.state = {
-		"currency": 12,
+		"currency": 22,
 	}
 
 	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
-	assert_eq(GameManager.state["currency"], 12)
+	assert_eq(GameManager.state["currency"], 22)
 
 
 func test_second_seat_costs_twenty_four_and_unlocks_assignment() -> void:
@@ -501,11 +509,19 @@ func test_second_seat_costs_twenty_four_and_unlocks_assignment() -> void:
 	assert_eq(GameManager.get_unlocked_seat_count(), 1)
 	assert_eq(GameManager.state["currency"], 23)
 
-	GameManager.state["currency"] = 24
+	GameManager.state["currency"] = 33
+	assert_true(
+		GameManager.is_day_growth_purchase_reserve_blocked(24)
+	)
+	assert_false(GameManager.try_purchase_second_seat())
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_eq(GameManager.state["currency"], 33)
+
+	GameManager.state["currency"] = 34
 	assert_true(GameManager.try_purchase_second_seat())
 	assert_eq(GameManager.get_unlocked_seat_count(), 2)
 	assert_eq(GameManager.get_second_seat_cost(), 0)
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_true(
 		GameManager.try_assign_customer_to_seat(
 			customer_id,
@@ -529,10 +545,18 @@ func test_server_costs_forty_five_and_serves_reserved_plate() -> void:
 	assert_false(GameManager.is_server_hired())
 	assert_eq(GameManager.state["currency"], 44)
 
-	GameManager.state["currency"] = 45
+	GameManager.state["currency"] = 54
+	assert_true(
+		GameManager.is_day_growth_purchase_reserve_blocked(45)
+	)
+	assert_false(GameManager.try_hire_server())
+	assert_false(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 54)
+
+	GameManager.state["currency"] = 55
 	assert_true(GameManager.try_hire_server())
 	assert_true(GameManager.is_server_hired())
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_eq(GameManager.get_server_hire_cost(), 0)
 	assert_false(GameManager.try_hire_server())
 
@@ -572,9 +596,23 @@ func test_server_costs_forty_five_and_serves_reserved_plate() -> void:
 	)
 
 
+func test_growth_purchases_are_blocked_after_service() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["currency"] = 200
+
+	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_false(GameManager.try_purchase_second_seat())
+	assert_false(GameManager.try_hire_server())
+	assert_eq(GameManager.state["currency"], 200)
+	assert_eq(GameManager.get_mackerel_station_level(), 1)
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_false(GameManager.is_server_hired())
+
+
 func test_cancelled_server_delivery_returns_plate_to_station() -> void:
 	GameManager.state = GameManager.create_default_game_state()
-	GameManager.state["currency"] = 45
+	GameManager.state["currency"] = 55
 	assert_true(GameManager.try_hire_server())
 	var customer_id: String = _create_ready_plate_order()
 	assert_eq(

@@ -2,8 +2,8 @@ extends GutTest
 
 const LOOP_COUNT: int = 3
 const SALES_PER_LOOP: int = 20
-const EXPECTED_REVENUE: int = 138
-const EXPECTED_DAY_TWO_CURRENCY: int = 47
+const EXPECTED_REVENUE: int = 136
+const EXPECTED_DAY_TWO_CURRENCY: int = 45
 const TEST_PATH_PREFIX: String = "user://street_test_p0_loop_"
 
 
@@ -56,7 +56,7 @@ func test_day_one_to_day_two_completes_three_times() -> void:
 		)
 		assert_eq(
 			GameManager.state["currency"],
-			57,
+			55,
 			"loop %d currency before market" % loop_index
 		)
 		assert_true(
@@ -205,17 +205,17 @@ func _complete_one_mackerel_sale(
 func _purchase_available_day_one_growth() -> void:
 	if (
 		GameManager.get_mackerel_station_level() == 1
-		and int(GameManager.state["currency"]) >= 12
+		and GameManager.can_afford_day_growth_purchase(12)
 	):
 		assert_true(GameManager.try_purchase_mackerel_station_upgrade())
 	if (
 		GameManager.get_unlocked_seat_count() == 1
-		and int(GameManager.state["currency"]) >= 24
+		and GameManager.can_afford_day_growth_purchase(24)
 	):
 		assert_true(GameManager.try_purchase_second_seat())
 	if (
 		not GameManager.is_server_hired()
-		and int(GameManager.state["currency"]) >= 45
+		and GameManager.can_afford_day_growth_purchase(45)
 	):
 		assert_true(GameManager.try_hire_server())
 

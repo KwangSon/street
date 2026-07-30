@@ -35,6 +35,10 @@ const MACKEREL_STATION_P0_MAX_LEVEL: int = 2
 const SECOND_SEAT_COST: int = 24
 const P0_MAX_SEATS: int = 2
 const SERVER_HIRE_COST: int = 45
+const OPERATING_RESERVE: int = 10
+const OPERATING_RESERVE_MESSAGE: String = (
+	"내일 장사 밑천 10문은 남겨두어야 합니다."
+)
 const MATERIAL_COST_PER_PORTION: Dictionary = {
 	"rice": 0.8,
 	"mackerel": 1.2,
@@ -1031,6 +1035,30 @@ func get_mackerel_upgrade_cost() -> int:
 	return int(tuning["upgrade_cost"])
 
 
+func can_afford_day_growth_purchase(cost: int) -> bool:
+	if (
+		cost <= 0
+		or String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SERVICE
+	):
+		return false
+	return (
+		int(state.get("currency", 0)) - cost
+		>= OPERATING_RESERVE
+	)
+
+
+func is_day_growth_purchase_reserve_blocked(cost: int) -> bool:
+	var currency: int = int(state.get("currency", 0))
+	return (
+		cost > 0
+		and String(state.get("screen", "")) == SCREEN_DAY
+		and String(state.get("phase", "")) == PHASE_SERVICE
+		and currency >= cost
+		and not can_afford_day_growth_purchase(cost)
+	)
+
+
 func try_purchase_mackerel_station_upgrade() -> bool:
 	var current_level: int = get_mackerel_station_level()
 	if current_level >= MACKEREL_STATION_P0_MAX_LEVEL:
@@ -1042,7 +1070,7 @@ func try_purchase_mackerel_station_upgrade() -> bool:
 		return false
 	var upgrade_cost: int = get_mackerel_upgrade_cost()
 	var currency: int = int(state.get("currency", 0))
-	if upgrade_cost <= 0 or currency < upgrade_cost:
+	if not can_afford_day_growth_purchase(upgrade_cost):
 		return false
 
 	var progression: Dictionary = progression_value
@@ -1078,7 +1106,7 @@ func try_purchase_second_seat() -> bool:
 	if not progression_value is Dictionary:
 		return false
 	var currency: int = int(state.get("currency", 0))
-	if currency < SECOND_SEAT_COST:
+	if not can_afford_day_growth_purchase(SECOND_SEAT_COST):
 		return false
 
 	var progression: Dictionary = progression_value
@@ -1106,7 +1134,7 @@ func try_hire_server() -> bool:
 	if not progression_value is Dictionary:
 		return false
 	var currency: int = int(state.get("currency", 0))
-	if currency < SERVER_HIRE_COST:
+	if not can_afford_day_growth_purchase(SERVER_HIRE_COST):
 		return false
 
 	var progression: Dictionary = progression_value

@@ -44,8 +44,8 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
 
 
-func test_upgrade_pad_blocks_purchase_when_currency_is_insufficient() -> void:
-	GameManager.state["currency"] = 11
+func test_upgrade_pad_explains_operating_reserve_block() -> void:
+	GameManager.state["currency"] = 21
 	var screen: DayScreen = await _create_screen()
 	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
 	screen.get_player().position = pad.position
@@ -53,15 +53,15 @@ func test_upgrade_pad_blocks_purchase_when_currency_is_insufficient() -> void:
 	await wait_physics_frames(70)
 
 	assert_eq(GameManager.get_mackerel_station_level(), 1)
-	assert_eq(GameManager.state["currency"], 11)
+	assert_eq(GameManager.state["currency"], 21)
 	assert_string_contains(
 		pad.get_node("StatusLabel").text,
-		"12문 필요"
+		"밑천 10문"
 	)
 
 
 func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
-	GameManager.state["currency"] = 12
+	GameManager.state["currency"] = 22
 	var screen: DayScreen = await _create_screen()
 	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
 	screen.get_player().position = pad.position
@@ -69,7 +69,7 @@ func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
 	await wait_physics_frames(70)
 
 	assert_eq(GameManager.get_mackerel_station_level(), 2)
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_eq(screen.get_mackerel_station().craft_duration, 3.0)
 	assert_eq(
 		screen.get_mackerel_station().get_node("Label").text,
@@ -77,7 +77,7 @@ func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
 	)
 	assert_eq(
 		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
-		"0문"
+		"10문"
 	)
 	assert_string_contains(
 		pad.get_node("StatusLabel").text,
@@ -85,8 +85,8 @@ func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
 	)
 
 
-func test_seat_pad_blocks_purchase_when_currency_is_insufficient() -> void:
-	GameManager.state["currency"] = 23
+func test_seat_pad_explains_operating_reserve_block() -> void:
+	GameManager.state["currency"] = 33
 	var screen: DayScreen = await _create_screen()
 	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
 	screen.get_player().position = pad.position
@@ -94,16 +94,16 @@ func test_seat_pad_blocks_purchase_when_currency_is_insufficient() -> void:
 	await wait_physics_frames(70)
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 1)
-	assert_eq(GameManager.state["currency"], 23)
+	assert_eq(GameManager.state["currency"], 33)
 	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_string_contains(
 		pad.get_node("StatusLabel").text,
-		"24문 필요"
+		"밑천 10문"
 	)
 
 
 func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
-	GameManager.state["currency"] = 24
+	GameManager.state["currency"] = 34
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (
 		screen.get_customer_manager()
@@ -125,7 +125,7 @@ func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
 	await wait_physics_frames(70)
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 2)
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_not_null(screen.get_node_or_null("World/Seat2"))
 	assert_true(customer_manager.has_seat("seat_2"))
 	assert_eq(
@@ -177,8 +177,8 @@ func test_loaded_second_seat_exists_before_customer_spawn() -> void:
 	assert_true(screen.get_customer_manager().has_seat("seat_2"))
 
 
-func test_staff_pad_blocks_hire_when_currency_is_insufficient() -> void:
-	GameManager.state["currency"] = 44
+func test_staff_pad_explains_operating_reserve_block() -> void:
+	GameManager.state["currency"] = 54
 	var screen: DayScreen = await _create_screen()
 	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
 	screen.get_player().position = pad.position
@@ -186,16 +186,16 @@ func test_staff_pad_blocks_hire_when_currency_is_insufficient() -> void:
 	await wait_physics_frames(70)
 
 	assert_false(GameManager.is_server_hired())
-	assert_eq(GameManager.state["currency"], 44)
+	assert_eq(GameManager.state["currency"], 54)
 	assert_null(screen.get_server())
 	assert_string_contains(
 		pad.get_node("StatusLabel").text,
-		"45문 필요"
+		"밑천 10문"
 	)
 
 
 func test_staff_pad_hires_one_server_and_refreshes_hud() -> void:
-	GameManager.state["currency"] = 45
+	GameManager.state["currency"] = 55
 	var screen: DayScreen = await _create_screen()
 	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
 	screen.get_player().position = pad.position
@@ -203,11 +203,11 @@ func test_staff_pad_hires_one_server_and_refreshes_hud() -> void:
 	await wait_physics_frames(70)
 
 	assert_true(GameManager.is_server_hired())
-	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.state["currency"], 10)
 	assert_not_null(screen.get_server())
 	assert_eq(
 		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
-		"0문"
+		"10문"
 	)
 	assert_string_contains(
 		pad.get_node("StatusLabel").text,
@@ -217,7 +217,7 @@ func test_staff_pad_hires_one_server_and_refreshes_hud() -> void:
 
 
 func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
-	GameManager.state["currency"] = 45
+	GameManager.state["currency"] = 55
 	assert_true(GameManager.try_hire_server())
 	var screen: DayScreen = await _create_screen()
 	var server: DayServer = screen.get_server()
