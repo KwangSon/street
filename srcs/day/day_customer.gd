@@ -9,7 +9,7 @@ const DayCustomerOrderTargetScript: Script = preload(
 	"res://srcs/day/day_customer_order_target.gd"
 )
 
-const MOVE_SPEED: float = 160.0
+const MOVE_SPEED: float = 240.0
 const ARRIVAL_DISTANCE: float = 4.0
 const BODY_COLOR: Color = Color("5f83a3")
 const ORDER_BUBBLE_COLOR: Color = Color("fff4d6")
