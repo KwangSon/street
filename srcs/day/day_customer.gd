@@ -20,6 +20,8 @@ var eating_duration: float = 2.0
 var _customer_id: String = ""
 var _seat_target: Vector2 = Vector2.ZERO
 var _moving_to_seat: bool = false
+var _queue_target: Vector2 = Vector2.ZERO
+var _moving_to_queue: bool = false
 var _exit_target: Vector2 = Vector2.ZERO
 var _moving_to_exit: bool = false
 var _order_bubble: Node2D
@@ -31,13 +33,10 @@ var _is_eating: bool = false
 
 func configure(
 	customer_id: String,
-	start_position: Vector2,
-	seat_target: Vector2
+	start_position: Vector2
 ) -> void:
 	_customer_id = customer_id
 	position = start_position
-	_seat_target = seat_target
-	_moving_to_seat = true
 	name = "Customer_%s" % customer_id
 
 
@@ -55,6 +54,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if _moving_to_seat:
 		_move_to_seat(delta)
+		return
+	if _moving_to_queue:
+		_move_to_queue(delta)
 		return
 	if _moving_to_exit:
 		_move_to_exit(delta)
@@ -86,10 +88,33 @@ func get_order_target() -> DayCustomerOrderTarget:
 	return _order_target
 
 
+func assign_seat(seat_target: Vector2) -> void:
+	_seat_target = seat_target
+	_moving_to_seat = true
+	_moving_to_queue = false
+	_moving_to_exit = false
+
+
+func move_to_queue(queue_target: Vector2) -> void:
+	_queue_target = queue_target
+	_moving_to_queue = true
+	_moving_to_seat = false
+	_moving_to_exit = false
+
+
+func is_moving_to_queue() -> bool:
+	return _moving_to_queue
+
+
+func get_queue_target() -> Vector2:
+	return _queue_target
+
+
 func start_leaving(exit_target: Vector2) -> void:
 	_exit_target = exit_target
 	_moving_to_exit = true
 	_moving_to_seat = false
+	_moving_to_queue = false
 	_is_eating = false
 
 
@@ -217,6 +242,21 @@ func _move_to_exit(delta: float) -> void:
 		velocity = Vector2.ZERO
 		_moving_to_exit = false
 		exited.emit(_customer_id)
+		return
+
+	velocity = offset.normalized() * minf(
+		MOVE_SPEED,
+		offset.length() / maxf(delta, 0.0001)
+	)
+	move_and_slide()
+
+
+func _move_to_queue(delta: float) -> void:
+	var offset: Vector2 = _queue_target - position
+	if offset.length() <= ARRIVAL_DISTANCE:
+		position = _queue_target
+		velocity = Vector2.ZERO
+		_moving_to_queue = false
 		return
 
 	velocity = offset.normalized() * minf(

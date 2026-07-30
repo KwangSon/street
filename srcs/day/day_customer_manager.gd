@@ -9,23 +9,43 @@ const DayCustomerScript: Script = preload(
 const DayPaymentScript: Script = preload(
 	"res://srcs/day/day_payment.gd"
 )
+const DEFAULT_SPAWN_INTERVAL: float = 3.0
+
+var spawn_interval: float = DEFAULT_SPAWN_INTERVAL
 
 var _entrance_position: Vector2 = Vector2.ZERO
 var _seat_targets: Dictionary = {}
+var _queue_targets: Array[Vector2] = []
 var _customers: Dictionary = {}
 var _payments: Dictionary = {}
+var _spawn_time_remaining: float = DEFAULT_SPAWN_INTERVAL
 
 
 func configure(
 	entrance_position: Vector2,
-	seat_targets: Dictionary
+	seat_targets: Dictionary,
+	queue_targets: Array[Vector2] = []
 ) -> void:
 	_entrance_position = entrance_position
 	_seat_targets = seat_targets.duplicate(true)
+	_queue_targets = queue_targets.duplicate()
 
 
 func _ready() -> void:
-	call_deferred("_spawn_initial_customer")
+	_spawn_time_remaining = spawn_interval
+	call_deferred("_spawn_customer")
+
+
+func _process(delta: float) -> void:
+	if GameManager.get_customer_queue().size() >= (
+		GameManager.MAX_CUSTOMER_QUEUE
+	):
+		return
+	_spawn_time_remaining -= maxf(delta, 0.0)
+	if _spawn_time_remaining > 0.0:
+		return
+	_spawn_time_remaining = maxf(spawn_interval, 0.01)
+	_spawn_customer()
 
 
 func get_customer(customer_id: String) -> DayCustomer:
@@ -40,15 +60,21 @@ func get_payment(customer_id: String) -> DayPayment:
 	return _payments.get(customer_id) as DayPayment
 
 
-func _spawn_initial_customer() -> void:
-	if not GameManager.get_day_customer_ids().is_empty():
+func _spawn_customer() -> void:
+	if (
+		not _has_available_seat()
+		and GameManager.get_customer_queue().size()
+		>= GameManager.MAX_CUSTOMER_QUEUE
+	):
 		return
 
 	var customer_id: String = GameManager.create_day_customer()
 	var seat_id: String = _find_available_seat_id()
-	if seat_id.is_empty():
-		return
-	if not GameManager.try_assign_customer_to_seat(
+	var joins_queue: bool = seat_id.is_empty()
+	if joins_queue:
+		if not GameManager.try_enqueue_day_customer(customer_id):
+			return
+	elif not GameManager.try_assign_customer_to_seat(
 		customer_id,
 		seat_id
 	):
@@ -57,9 +83,15 @@ func _spawn_initial_customer() -> void:
 	var customer: DayCustomer = DayCustomerScript.new()
 	customer.configure(
 		customer_id,
-		_entrance_position,
-		Vector2(_seat_targets[seat_id])
+		_entrance_position
 	)
+	if joins_queue:
+		var queue_index: int = (
+			GameManager.get_customer_queue().find(customer_id)
+		)
+		customer.move_to_queue(_get_queue_target(queue_index))
+	else:
+		customer.assign_seat(Vector2(_seat_targets[seat_id]))
 	customer.reached_seat.connect(_on_customer_reached_seat)
 	customer.finished_eating.connect(_on_customer_finished_eating)
 	customer.exited.connect(_on_customer_exited)
@@ -80,6 +112,57 @@ func _find_available_seat_id() -> String:
 		if not seat_assignments.has(seat_id):
 			return seat_id
 	return ""
+
+
+func _has_available_seat() -> bool:
+	return not _find_available_seat_id().is_empty()
+
+
+func _get_queue_target(queue_index: int) -> Vector2:
+	if (
+		queue_index >= 0
+		and queue_index < _queue_targets.size()
+	):
+		return _queue_targets[queue_index]
+	return _entrance_position + Vector2(
+		60.0 * float(queue_index + 1),
+		0.0
+	)
+
+
+func _refresh_queue_targets() -> void:
+	var customer_queue: Array[String] = (
+		GameManager.get_customer_queue()
+	)
+	for queue_index: int in range(customer_queue.size()):
+		var customer: DayCustomer = get_customer(
+			customer_queue[queue_index]
+		)
+		if customer != null:
+			customer.move_to_queue(
+				_get_queue_target(queue_index)
+			)
+
+
+func _promote_next_customer() -> void:
+	var customer_queue: Array[String] = (
+		GameManager.get_customer_queue()
+	)
+	if customer_queue.is_empty():
+		return
+	var seat_id: String = _find_available_seat_id()
+	if seat_id.is_empty():
+		return
+	var customer_id: String = customer_queue[0]
+	if not GameManager.try_assign_customer_to_seat(
+		customer_id,
+		seat_id
+	):
+		return
+	var customer: DayCustomer = get_customer(customer_id)
+	if customer != null:
+		customer.assign_seat(Vector2(_seat_targets[seat_id]))
+	_refresh_queue_targets()
 
 
 func _on_customer_reached_seat(customer_id: String) -> void:
@@ -139,4 +222,8 @@ func _on_customer_exited(customer_id: String) -> void:
 	_customers.erase(customer_id)
 	if customer != null:
 		customer.queue_free()
-	call_deferred("_spawn_initial_customer")
+	if _customers.is_empty():
+		_spawn_customer()
+	else:
+		_promote_next_customer()
+		_spawn_time_remaining = maxf(spawn_interval, 0.01)

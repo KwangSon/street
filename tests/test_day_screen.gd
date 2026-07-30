@@ -74,6 +74,38 @@ func test_initial_customer_reserves_seat_and_shows_order() -> void:
 	)
 
 
+func test_screen_customer_queue_stops_at_three_waiting() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	customer_manager.spawn_interval = 0.01
+	customer_manager._spawn_time_remaining = 0.01
+
+	await wait_physics_frames(20)
+
+	assert_eq(customer_manager.get_customer_count(), 4)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_2",
+			"customer_3",
+			"customer_4",
+		]
+	)
+	assert_eq(
+		GameManager.get_day_customer("customer_2")["state"],
+		GameManager.CUSTOMER_WAITING_IN_QUEUE
+	)
+	assert_eq(
+		customer_manager.get_customer(
+			"customer_2"
+		).get_queue_target(),
+		Vector2(190.0, 860.0)
+	)
+	assert_null(customer_manager.get_customer("customer_5"))
+
+
 func test_station_approach_without_order_does_not_start_crafting() -> void:
 	var screen: DayScreen = await _create_screen()
 	var station: MackerelStation = screen.get_mackerel_station()
@@ -167,8 +199,14 @@ func test_order_mackerel_rice_station_sequence_starts_crafting() -> void:
 
 func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	customer_manager.spawn_interval = 0.01
+	customer_manager._spawn_time_remaining = 0.01
+	await wait_physics_frames(20)
 	var customer: DayCustomer = (
-		screen.get_customer_manager().get_customer("customer_1")
+		customer_manager.get_customer("customer_1")
 	)
 	customer.position = customer.get_seat_target()
 	customer.eating_duration = 0.1
@@ -204,9 +242,6 @@ func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 		"계산"
 	)
 
-	var customer_manager: DayCustomerManager = (
-		screen.get_customer_manager()
-	)
 	var payment: DayPayment = customer_manager.get_payment(
 		"customer_1"
 	)
@@ -231,6 +266,18 @@ func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 			"seat_1"
 		],
 		"customer_2"
+	)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_3",
+			"customer_4",
+			"customer_5",
+		]
+	)
+	assert_eq(
+		GameManager.get_day_customer("customer_2")["state"],
+		GameManager.CUSTOMER_MOVING_TO_SEAT
 	)
 
 

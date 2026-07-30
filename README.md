@@ -21,7 +21,7 @@
 - `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
 - `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동, 드래그 카메라와 고등어 조리대 연결
 - `srcs/day/day_customer.gd`: 손님의 좌석 이동과 주문 말풍선
-- `srcs/day/day_customer_manager.gd`: 첫 손님 생성, 좌석 예약과 고등어 주문 생성
+- `srcs/day/day_customer_manager.gd`: 손님 생성, 좌석 예약, 최대 3명 FIFO 대기열과 고등어 주문 생성
 - `srcs/day/day_customer_order_target.gd`: 손님 접근 시 주문 한 건 수령
 - `srcs/day/day_preparation_source.gd`: 고등어 상자와 밥통의 순차 재료 수령
 - `srcs/day/day_payment.gd`: 좌석 옆 엽전 표시와 접근 회수
@@ -34,7 +34,7 @@
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
 - 실행용 메인 장면이 `project.godot`에 등록돼 있다.
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
-- 손님 한 명이 좌석 1에서 고등어 주문, 식사, 6문 결제와 퇴장을 마치면 좌석을 반납하고 다음 손님이 생성된다. 다중 손님 대기열은 아직 구현하지 않았다.
+- 좌석 1이 차 있으면 3초 간격으로 최대 3명이 입구에 대기한다. 결제 손님이 퇴장하면 대기열의 첫 손님이 좌석으로 이동하고 새 손님이 맨 뒤를 채운다.
 - 낮 영업의 고등어 1접시는 `손님 주문 수령 → 고등어 상자 → 밥통 → 고등어 조리대` 순서로 만든다. 조리대에 바로 접근하면 제작되지 않는다.
 - 새벽 화면과 손님·서빙·결제는 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
 

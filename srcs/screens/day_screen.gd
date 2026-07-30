@@ -267,7 +267,12 @@ func _build_world() -> void:
 		Vector2(120.0, 860.0),
 		{
 			"seat_1": Vector2(500.0, 750.0),
-		}
+		},
+		[
+			Vector2(190.0, 860.0),
+			Vector2(260.0, 860.0),
+			Vector2(330.0, 860.0),
+		]
 	)
 	_customer_manager.interactable_created.connect(
 		_on_customer_interactable_created
