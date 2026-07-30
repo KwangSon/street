@@ -5,6 +5,8 @@ enum ServerState {
 	IDLE,
 	MOVING_TO_STATION,
 	MOVING_TO_CUSTOMER,
+	MOVING_TO_ORDER,
+	MOVING_TO_PAYMENT,
 }
 
 const MOVE_SPEED: float = 260.0
@@ -65,13 +67,19 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	match _server_state:
 		ServerState.IDLE:
-			_find_next_plate()
+			_find_next_task()
 		ServerState.MOVING_TO_STATION:
 			if _advance_path(delta):
 				_collect_reserved_plate()
 		ServerState.MOVING_TO_CUSTOMER:
 			if _advance_path(delta):
 				_serve_customer()
+		ServerState.MOVING_TO_ORDER:
+			if _advance_path(delta):
+				_take_customer_order()
+		ServerState.MOVING_TO_PAYMENT:
+			if _advance_path(delta):
+				_collect_customer_payment()
 
 
 func get_server_state() -> ServerState:
@@ -102,23 +110,60 @@ func _recover_interrupted_delivery() -> void:
 	GameManager.cancel_server_plate_delivery(customer_id)
 
 
-func _find_next_plate() -> void:
+func _find_next_task() -> void:
 	var reserved_customer_id: String = (
 		GameManager.try_reserve_ready_plate_for_server()
 	)
-	if reserved_customer_id.is_empty():
+	if not reserved_customer_id.is_empty():
+		_customer_id = reserved_customer_id
+		var station_item: Dictionary = (
+			GameManager.get_station_item()
+		)
+		var menu_id: String = String(
+			station_item.get("menu", "")
+		)
+		_station_position = Vector2(
+			_station_positions.get(menu_id, _station_position)
+		)
+		if not _start_path(_station_position):
+			GameManager.cancel_server_plate_delivery(_customer_id)
+			_reset_to_idle()
+			return
+		_server_state = ServerState.MOVING_TO_STATION
 		return
-	_customer_id = reserved_customer_id
-	var station_item: Dictionary = GameManager.get_station_item()
-	var menu_id: String = String(station_item.get("menu", ""))
-	_station_position = Vector2(
-		_station_positions.get(menu_id, _station_position)
+
+	var waiting_payments: Array[String] = (
+		GameManager.get_waiting_payment_customer_ids()
 	)
-	if not _start_path(_station_position):
-		GameManager.cancel_server_plate_delivery(_customer_id)
-		_reset_to_idle()
-		return
-	_server_state = ServerState.MOVING_TO_STATION
+	if not waiting_payments.is_empty():
+		if _start_customer_task(
+			waiting_payments[0],
+			ServerState.MOVING_TO_PAYMENT
+		):
+			return
+
+	var waiting_orders: Array[Dictionary] = (
+		GameManager.get_waiting_orders()
+	)
+	if not waiting_orders.is_empty():
+		_start_customer_task(
+			String(waiting_orders[0].get("customer_id", "")),
+			ServerState.MOVING_TO_ORDER
+		)
+
+
+func _start_customer_task(
+	customer_id: String,
+	next_state: int
+) -> bool:
+	var customer: DayCustomer = _customer_manager.get_customer(
+		customer_id
+	)
+	if customer == null or not _start_path(customer.position):
+		return false
+	_customer_id = customer_id
+	_server_state = next_state
+	return true
 
 
 func _collect_reserved_plate() -> void:
@@ -142,6 +187,19 @@ func _collect_reserved_plate() -> void:
 func _serve_customer() -> void:
 	if not GameManager.try_server_serve_order(_customer_id):
 		GameManager.cancel_server_plate_delivery(_customer_id)
+	_reset_to_idle()
+
+
+func _take_customer_order() -> void:
+	if GameManager.is_employee_hired(GameManager.STAFF_ROLE_CHEF):
+		GameManager.try_chef_accept_waiting_order(_customer_id)
+	else:
+		GameManager.try_accept_waiting_order(_customer_id)
+	_reset_to_idle()
+
+
+func _collect_customer_payment() -> void:
+	_customer_manager.collect_payment_by_staff(_customer_id)
 	_reset_to_idle()
 
 
@@ -203,7 +261,7 @@ func _build_visual() -> void:
 	label.name = "NameLabel"
 	label.position = Vector2(-40.0, 32.0)
 	label.size = Vector2(80.0, 26.0)
-	label.text = "점원"
+	label.text = "접객"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_color_override("font_color", TEXT_COLOR)
 	label.add_theme_font_size_override("font_size", 17)

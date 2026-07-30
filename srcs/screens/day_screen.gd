@@ -12,8 +12,8 @@ const DayNavigationScript: Script = preload(
 const DayInteractionControllerScript: Script = preload(
 	"res://srcs/day/day_interaction_controller.gd"
 )
-const MackerelStationScript: Script = preload(
-	"res://srcs/day/mackerel_station.gd"
+const CookingCounterScript: Script = preload(
+	"res://srcs/day/cooking_counter.gd"
 )
 const DayCustomerManagerScript: Script = preload(
 	"res://srcs/day/day_customer_manager.gd"
@@ -21,17 +21,11 @@ const DayCustomerManagerScript: Script = preload(
 const DayPreparationSourceScript: Script = preload(
 	"res://srcs/day/day_preparation_source.gd"
 )
-const DayUpgradePadScript: Script = preload(
-	"res://srcs/day/day_upgrade_pad.gd"
-)
-const DaySeatPurchasePadScript: Script = preload(
-	"res://srcs/day/day_seat_purchase_pad.gd"
-)
-const DayStaffHirePadScript: Script = preload(
-	"res://srcs/day/day_staff_hire_pad.gd"
-)
 const DayServerScript: Script = preload(
 	"res://srcs/day/day_server.gd"
+)
+const DayChefScript: Script = preload(
+	"res://srcs/day/day_chef.gd"
 )
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
@@ -61,29 +55,37 @@ const SEAT_3_TARGET: Vector2 = Vector2(500.0, 1030.0)
 const SEAT_4_ID: String = "seat_4"
 const SEAT_4_POSITION: Vector2 = Vector2(900.0, 1200.0)
 const SEAT_4_TARGET: Vector2 = Vector2(900.0, 1110.0)
-const STAFF_PAD_POSITION: Vector2 = Vector2(900.0, 1420.0)
 const SERVER_START_POSITION: Vector2 = Vector2(900.0, 1320.0)
+const CHEF_START_POSITION: Vector2 = Vector2(760.0, 620.0)
 
 const FACILITIES: Array[Dictionary] = [
 	{
-		"name": "IngredientBox",
-		"label": "재료",
+		"name": "FishStation",
+		"label": "생선류",
 		"position": Vector2(120.0, 300.0),
 		"size": Vector2(140.0, 96.0),
 		"color": Color("79986b"),
 		"collision": true,
 	},
 	{
-		"name": "RicePot",
-		"label": "밥통",
+		"name": "RiceStation",
+		"label": "밥",
 		"position": Vector2(320.0, 300.0),
-		"size": Vector2(120.0, 96.0),
+		"size": Vector2(140.0, 96.0),
 		"color": Color("c6a477"),
 		"collision": true,
 	},
 	{
-		"name": "MackerelStation",
-		"label": "고등어 조리대",
+		"name": "OtherStation",
+		"label": "기타요리",
+		"position": Vector2(760.0, 300.0),
+		"size": Vector2(160.0, 96.0),
+		"color": Color("d7bd61"),
+		"collision": true,
+	},
+	{
+		"name": "CookingCounter",
+		"label": "조리대",
 		"position": Vector2(540.0, 300.0),
 		"size": Vector2(180.0, 96.0),
 		"color": Color("7197ad"),
@@ -103,22 +105,6 @@ const FACILITIES: Array[Dictionary] = [
 		"position": Vector2(500.0, 840.0),
 		"size": Vector2(120.0, 100.0),
 		"color": Color("a57853"),
-		"collision": true,
-	},
-	{
-		"name": "EggBox",
-		"label": "계란 바구니",
-		"position": Vector2(760.0, 300.0),
-		"size": Vector2(140.0, 96.0),
-		"color": Color("d7bd61"),
-		"collision": true,
-	},
-	{
-		"name": "EggStation",
-		"label": "계란 조리대",
-		"position": Vector2(940.0, 340.0),
-		"size": Vector2(180.0, 96.0),
-		"color": Color("c8b25b"),
 		"collision": true,
 	},
 	{
@@ -152,17 +138,13 @@ var _player: DayPlayer
 var _camera: Camera2D
 var _navigation: DayNavigation
 var _interaction_controller: DayInteractionController
-var _mackerel_station: MackerelStation
-var _egg_station: MackerelStation
+var _cooking_counter: CookingCounter
 var _customer_manager: DayCustomerManager
 var _ingredient_box: DayPreparationSource
 var _egg_box: DayPreparationSource
 var _rice_pot: DayPreparationSource
-var _mackerel_upgrade_pad: DayUpgradePad
-var _egg_upgrade_pad: DayUpgradePad
-var _seat_purchase_pad: DaySeatPurchasePad
-var _staff_hire_pad: DayStaffHirePad
 var _server: DayServer
+var _chef: DayChef
 var _inventory_label: Label
 var _currency_label: Label
 var _time_label: Label
@@ -171,6 +153,17 @@ var _settlement_panel: ColorRect
 var _settlement_summary_label: Label
 var _settlement_progress_label: Label
 var _settlement_continue_button: Button
+var _employee_button: Button
+var _employee_panel: ColorRect
+var _employee_summary_label: Label
+var _chef_hire_button: Button
+var _service_hire_button: Button
+var _upgrade_button: Button
+var _upgrade_panel: ColorRect
+var _upgrade_summary_label: Label
+var _seat_upgrade_button: Button
+var _mackerel_upgrade_button: Button
+var _egg_upgrade_button: Button
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -275,12 +268,8 @@ func get_interaction_controller() -> DayInteractionController:
 	return _interaction_controller
 
 
-func get_mackerel_station() -> MackerelStation:
-	return _mackerel_station
-
-
-func get_egg_station() -> MackerelStation:
-	return _egg_station
+func get_cooking_counter() -> CookingCounter:
+	return _cooking_counter
 
 
 func get_customer_manager() -> DayCustomerManager:
@@ -299,24 +288,48 @@ func get_rice_pot() -> DayPreparationSource:
 	return _rice_pot
 
 
-func get_mackerel_upgrade_pad() -> DayUpgradePad:
-	return _mackerel_upgrade_pad
-
-
-func get_egg_upgrade_pad() -> DayUpgradePad:
-	return _egg_upgrade_pad
-
-
-func get_seat_purchase_pad() -> DaySeatPurchasePad:
-	return _seat_purchase_pad
-
-
-func get_staff_hire_pad() -> DayStaffHirePad:
-	return _staff_hire_pad
-
-
 func get_server() -> DayServer:
 	return _server
+
+
+func get_chef() -> DayChef:
+	return _chef
+
+
+func get_employee_button() -> Button:
+	return _employee_button
+
+
+func get_employee_panel() -> ColorRect:
+	return _employee_panel
+
+
+func get_chef_hire_button() -> Button:
+	return _chef_hire_button
+
+
+func get_service_hire_button() -> Button:
+	return _service_hire_button
+
+
+func get_upgrade_button() -> Button:
+	return _upgrade_button
+
+
+func get_upgrade_panel() -> ColorRect:
+	return _upgrade_panel
+
+
+func get_seat_upgrade_button() -> Button:
+	return _seat_upgrade_button
+
+
+func get_mackerel_upgrade_button() -> Button:
+	return _mackerel_upgrade_button
+
+
+func get_egg_upgrade_button() -> Button:
+	return _egg_upgrade_button
 
 
 func get_early_close_button() -> Button:
@@ -375,28 +388,6 @@ func _build_world() -> void:
 			continue
 		_add_facility(facility)
 
-	_mackerel_upgrade_pad = DayUpgradePadScript.new()
-	_mackerel_upgrade_pad.name = "MackerelUpgradePad"
-	_mackerel_upgrade_pad.configure(GameManager.MENU_MACKEREL)
-	_mackerel_upgrade_pad.position = Vector2(540.0, 465.0)
-	_world.add_child(_mackerel_upgrade_pad)
-
-	_egg_upgrade_pad = DayUpgradePadScript.new()
-	_egg_upgrade_pad.name = "EggUpgradePad"
-	_egg_upgrade_pad.configure(GameManager.MENU_EGG)
-	_egg_upgrade_pad.position = Vector2(940.0, 500.0)
-	_world.add_child(_egg_upgrade_pad)
-
-	_seat_purchase_pad = DaySeatPurchasePadScript.new()
-	_seat_purchase_pad.name = "Seat2PurchasePad"
-	_seat_purchase_pad.position = Vector2(620.0, 580.0)
-	_world.add_child(_seat_purchase_pad)
-
-	_staff_hire_pad = DayStaffHirePadScript.new()
-	_staff_hire_pad.name = "StaffHirePad"
-	_staff_hire_pad.position = STAFF_PAD_POSITION
-	_world.add_child(_staff_hire_pad)
-
 	_player = DayPlayerScript.new()
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
 	_player.position = PLAYER_START_POSITION
@@ -406,23 +397,11 @@ func _build_world() -> void:
 	_interaction_controller = DayInteractionControllerScript.new()
 	_interaction_controller.name = "InteractionController"
 	_interaction_controller.configure(_player)
-	_interaction_controller.register_interactable(_mackerel_station)
+	_interaction_controller.register_interactable(_cooking_counter)
 	_interaction_controller.register_interactable(_ingredient_box)
 	_interaction_controller.register_interactable(_rice_pot)
-	if _egg_station != null:
-		_interaction_controller.register_interactable(_egg_station)
 	if _egg_box != null:
 		_interaction_controller.register_interactable(_egg_box)
-	_interaction_controller.register_interactable(
-		_mackerel_upgrade_pad
-	)
-	_interaction_controller.register_interactable(_egg_upgrade_pad)
-	_interaction_controller.register_interactable(
-		_seat_purchase_pad
-	)
-	_interaction_controller.register_interactable(
-		_staff_hire_pad
-	)
 	_world.add_child(_interaction_controller)
 
 	_customer_manager = DayCustomerManagerScript.new()
@@ -458,7 +437,7 @@ func _build_world() -> void:
 		DayPlayer.COLLISION_RADIUS,
 		_get_navigation_obstacle_rects()
 	)
-	_install_server_if_hired()
+	_sync_employees()
 
 
 func _add_map_background() -> void:
@@ -528,32 +507,28 @@ func _add_map_boundaries() -> void:
 func _add_facility(facility: Dictionary) -> void:
 	var facility_node: Node2D
 	var facility_name: String = String(facility["name"])
-	if facility_name in ["MackerelStation", "EggStation"]:
-		var menu_station: MackerelStation = MackerelStationScript.new()
-		var station_menu_id: String = (
-			GameManager.MENU_EGG
-			if facility_name == "EggStation"
-			else GameManager.MENU_MACKEREL
-		)
+	if facility_name == "CookingCounter":
+		var menu_station: CookingCounter = CookingCounterScript.new()
 		menu_station.configure(
 			facility["size"],
 			facility["color"],
-			station_menu_id
+			GameManager.MENU_MACKEREL
 		)
-		if station_menu_id == GameManager.MENU_EGG:
-			_egg_station = menu_station
-		else:
-			_mackerel_station = menu_station
+		_cooking_counter = menu_station
 		facility_node = menu_station
-	elif facility_name in ["IngredientBox", "EggBox", "RicePot"]:
+	elif facility_name in [
+		"FishStation",
+		"OtherStation",
+		"RiceStation",
+	]:
 		var preparation_source: DayPreparationSource = (
 			DayPreparationSourceScript.new()
 		)
 		var source_kind: DayPreparationSource.SourceKind = (
-			DayPreparationSource.SourceKind.MACKEREL
-			if facility_name == "IngredientBox"
-			else DayPreparationSource.SourceKind.EGG
-			if facility_name == "EggBox"
+			DayPreparationSource.SourceKind.FISH
+			if facility_name == "FishStation"
+			else DayPreparationSource.SourceKind.OTHER
+			if facility_name == "OtherStation"
 			else DayPreparationSource.SourceKind.RICE
 		)
 		preparation_source.configure(
@@ -562,9 +537,9 @@ func _add_facility(facility: Dictionary) -> void:
 			facility["color"],
 			String(facility["label"])
 		)
-		if facility_name == "IngredientBox":
+		if facility_name == "FishStation":
 			_ingredient_box = preparation_source
-		elif facility_name == "EggBox":
+		elif facility_name == "OtherStation":
 			_egg_box = preparation_source
 		else:
 			_rice_pot = preparation_source
@@ -577,8 +552,7 @@ func _add_facility(facility: Dictionary) -> void:
 
 	var facility_size: Vector2 = facility["size"]
 	if (
-		facility_node != _mackerel_station
-		and facility_node != _egg_station
+		facility_node != _cooking_counter
 		and facility_node != _ingredient_box
 		and facility_node != _egg_box
 		and facility_node != _rice_pot
@@ -667,6 +641,8 @@ func _build_fixed_ui() -> void:
 	add_child(fixed_ui)
 
 	_add_hud(fixed_ui)
+	_add_employee_ui(fixed_ui)
+	_add_upgrade_ui(fixed_ui)
 	_add_settlement_ui(fixed_ui)
 
 
@@ -754,6 +730,184 @@ func _add_hud_label(
 	label.add_theme_font_size_override("font_size", font_size)
 	parent.add_child(label)
 	return label
+
+
+func _add_employee_ui(fixed_ui: CanvasLayer) -> void:
+	_employee_button = Button.new()
+	_employee_button.name = "EmployeeButton"
+	_employee_button.position = Vector2(16.0, 1188.0)
+	_employee_button.size = Vector2(150.0, 70.0)
+	_employee_button.text = "직원 고용"
+	_employee_button.focus_mode = Control.FOCUS_NONE
+	_employee_button.add_theme_font_size_override("font_size", 20)
+	_employee_button.pressed.connect(_on_employee_button_pressed)
+	fixed_ui.add_child(_employee_button)
+
+	_employee_panel = ColorRect.new()
+	_employee_panel.name = "EmployeePanel"
+	_employee_panel.position = Vector2(42.0, 650.0)
+	_employee_panel.size = Vector2(636.0, 500.0)
+	_employee_panel.color = SETTLEMENT_PANEL_COLOR
+	_employee_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	fixed_ui.add_child(_employee_panel)
+
+	var title: Label = Label.new()
+	title.position = Vector2(30.0, 22.0)
+	title.size = Vector2(470.0, 54.0)
+	title.text = "직원 고용 · 주급"
+	title.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	title.add_theme_font_size_override("font_size", 30)
+	_employee_panel.add_child(title)
+
+	var close_button: Button = Button.new()
+	close_button.name = "CloseButton"
+	close_button.position = Vector2(538.0, 18.0)
+	close_button.size = Vector2(70.0, 58.0)
+	close_button.text = "닫기"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.pressed.connect(_on_employee_close_pressed)
+	_employee_panel.add_child(close_button)
+
+	_employee_summary_label = Label.new()
+	_employee_summary_label.name = "SummaryLabel"
+	_employee_summary_label.position = Vector2(30.0, 86.0)
+	_employee_summary_label.size = Vector2(576.0, 92.0)
+	_employee_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_employee_summary_label.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	_employee_summary_label.add_theme_font_size_override(
+		"font_size",
+		18
+	)
+	_employee_panel.add_child(_employee_summary_label)
+
+	_chef_hire_button = Button.new()
+	_chef_hire_button.name = "ChefHireButton"
+	_chef_hire_button.position = Vector2(30.0, 194.0)
+	_chef_hire_button.size = Vector2(576.0, 112.0)
+	_chef_hire_button.focus_mode = Control.FOCUS_NONE
+	_chef_hire_button.add_theme_font_size_override("font_size", 20)
+	_chef_hire_button.pressed.connect(_on_chef_hire_pressed)
+	_employee_panel.add_child(_chef_hire_button)
+
+	_service_hire_button = Button.new()
+	_service_hire_button.name = "ServiceHireButton"
+	_service_hire_button.position = Vector2(30.0, 326.0)
+	_service_hire_button.size = Vector2(576.0, 112.0)
+	_service_hire_button.focus_mode = Control.FOCUS_NONE
+	_service_hire_button.add_theme_font_size_override(
+		"font_size",
+		20
+	)
+	_service_hire_button.pressed.connect(
+		_on_service_hire_pressed
+	)
+	_employee_panel.add_child(_service_hire_button)
+	_employee_panel.visible = false
+	_refresh_employee_ui()
+
+
+func _add_upgrade_ui(fixed_ui: CanvasLayer) -> void:
+	_upgrade_button = Button.new()
+	_upgrade_button.name = "UpgradeButton"
+	_upgrade_button.position = Vector2(554.0, 1188.0)
+	_upgrade_button.size = Vector2(150.0, 70.0)
+	_upgrade_button.text = "해금"
+	_upgrade_button.focus_mode = Control.FOCUS_NONE
+	_upgrade_button.add_theme_font_size_override("font_size", 20)
+	_upgrade_button.pressed.connect(_on_upgrade_button_pressed)
+	fixed_ui.add_child(_upgrade_button)
+
+	_upgrade_panel = ColorRect.new()
+	_upgrade_panel.name = "UpgradePanel"
+	_upgrade_panel.position = Vector2(42.0, 530.0)
+	_upgrade_panel.size = Vector2(636.0, 620.0)
+	_upgrade_panel.color = SETTLEMENT_PANEL_COLOR
+	_upgrade_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	fixed_ui.add_child(_upgrade_panel)
+
+	var title: Label = Label.new()
+	title.position = Vector2(30.0, 22.0)
+	title.size = Vector2(470.0, 54.0)
+	title.text = "해금 · 업그레이드"
+	title.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	title.add_theme_font_size_override("font_size", 30)
+	_upgrade_panel.add_child(title)
+
+	var close_button: Button = Button.new()
+	close_button.name = "CloseButton"
+	close_button.position = Vector2(538.0, 18.0)
+	close_button.size = Vector2(70.0, 58.0)
+	close_button.text = "닫기"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.pressed.connect(_on_upgrade_close_pressed)
+	_upgrade_panel.add_child(close_button)
+
+	_upgrade_summary_label = Label.new()
+	_upgrade_summary_label.name = "SummaryLabel"
+	_upgrade_summary_label.position = Vector2(30.0, 82.0)
+	_upgrade_summary_label.size = Vector2(576.0, 66.0)
+	_upgrade_summary_label.text = (
+		"구매 즉시 좌석이 활성화되고 메뉴 성능과 주문 후보가 갱신됩니다."
+	)
+	_upgrade_summary_label.autowrap_mode = (
+		TextServer.AUTOWRAP_WORD_SMART
+	)
+	_upgrade_summary_label.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	_upgrade_summary_label.add_theme_font_size_override(
+		"font_size",
+		18
+	)
+	_upgrade_panel.add_child(_upgrade_summary_label)
+
+	_seat_upgrade_button = _add_upgrade_option_button(
+		_upgrade_panel,
+		"SeatUpgradeButton",
+		Vector2(30.0, 158.0),
+		_on_seat_upgrade_pressed
+	)
+	_mackerel_upgrade_button = _add_upgrade_option_button(
+		_upgrade_panel,
+		"MackerelUpgradeButton",
+		Vector2(30.0, 294.0),
+		_on_mackerel_upgrade_pressed
+	)
+	_egg_upgrade_button = _add_upgrade_option_button(
+		_upgrade_panel,
+		"EggUpgradeButton",
+		Vector2(30.0, 430.0),
+		_on_egg_upgrade_pressed
+	)
+	_upgrade_panel.visible = false
+	_refresh_upgrade_ui()
+
+
+func _add_upgrade_option_button(
+	parent: Control,
+	button_name: String,
+	button_position: Vector2,
+	pressed_callback: Callable
+) -> Button:
+	var button: Button = Button.new()
+	button.name = button_name
+	button.position = button_position
+	button.size = Vector2(576.0, 116.0)
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 20)
+	button.pressed.connect(pressed_callback)
+	parent.add_child(button)
+	return button
 
 
 func _add_settlement_ui(fixed_ui: CanvasLayer) -> void:
@@ -844,6 +998,8 @@ func _add_settlement_ui(fixed_ui: CanvasLayer) -> void:
 func _begin_pointer(pointer_id: int, position: Vector2) -> void:
 	if _active_pointer_id != NO_POINTER_ID:
 		return
+	if _is_fixed_bottom_ui_point(position):
+		return
 	if not get_play_area_rect().has_point(position):
 		return
 
@@ -851,6 +1007,33 @@ func _begin_pointer(pointer_id: int, position: Vector2) -> void:
 	_gesture_start = position
 	_gesture_last = position
 	_gesture_is_drag = false
+
+
+func _is_fixed_bottom_ui_point(screen_position: Vector2) -> bool:
+	for control: Control in [
+		_employee_button,
+		_upgrade_button,
+	]:
+		if (
+			control != null
+			and control.visible
+			and Rect2(
+				control.position,
+				control.size
+			).has_point(screen_position)
+		):
+			return true
+	for panel: Control in [_employee_panel, _upgrade_panel]:
+		if (
+			panel != null
+			and panel.visible
+			and Rect2(
+				panel.position,
+				panel.size
+			).has_point(screen_position)
+		):
+			return true
+	return false
 
 
 func _move_pointer(pointer_id: int, position: Vector2) -> void:
@@ -912,10 +1095,11 @@ func _on_viewport_size_changed() -> void:
 
 func _on_game_state_changed() -> void:
 	_install_unlocked_seats()
-	_install_egg_facilities_if_unlocked()
-	_install_server_if_hired()
+	_sync_employees()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
+	_refresh_employee_ui()
+	_refresh_upgrade_ui()
 	_refresh_early_close_button()
 	_refresh_settlement_ui()
 	if _player != null:
@@ -995,6 +1179,63 @@ func _on_settlement_continue_pressed() -> void:
 		screen_change_requested.emit()
 
 
+func _on_employee_button_pressed() -> void:
+	if _employee_panel == null:
+		return
+	if _upgrade_panel != null:
+		_upgrade_panel.visible = false
+	_employee_panel.visible = not _employee_panel.visible
+	_refresh_employee_ui()
+
+
+func _on_employee_close_pressed() -> void:
+	if _employee_panel != null:
+		_employee_panel.visible = false
+
+
+func _on_chef_hire_pressed() -> void:
+	GameManager.try_hire_employee(GameManager.STAFF_ROLE_CHEF)
+	_refresh_employee_ui()
+
+
+func _on_service_hire_pressed() -> void:
+	GameManager.try_hire_employee(GameManager.STAFF_ROLE_SERVICE)
+	_refresh_employee_ui()
+
+
+func _on_upgrade_button_pressed() -> void:
+	if _upgrade_panel == null:
+		return
+	if _employee_panel != null:
+		_employee_panel.visible = false
+	_upgrade_panel.visible = not _upgrade_panel.visible
+	_refresh_upgrade_ui()
+
+
+func _on_upgrade_close_pressed() -> void:
+	if _upgrade_panel != null:
+		_upgrade_panel.visible = false
+
+
+func _on_seat_upgrade_pressed() -> void:
+	GameManager.try_purchase_next_seat()
+	_refresh_upgrade_ui()
+
+
+func _on_mackerel_upgrade_pressed() -> void:
+	GameManager.try_purchase_menu_station_upgrade(
+		GameManager.MENU_MACKEREL
+	)
+	_refresh_upgrade_ui()
+
+
+func _on_egg_upgrade_pressed() -> void:
+	GameManager.try_purchase_menu_station_upgrade(
+		GameManager.MENU_EGG
+	)
+	_refresh_upgrade_ui()
+
+
 func _on_customer_interactable_created(
 	interactable: DayInteractable
 ) -> void:
@@ -1047,42 +1288,6 @@ func _install_unlocked_seats() -> void:
 		)
 
 
-func _install_egg_facilities_if_unlocked() -> void:
-	if (
-		_world == null
-		or not GameManager.is_menu_unlocked(GameManager.MENU_EGG)
-	):
-		return
-	var installed_any: bool = false
-	for facility_name: String in ["EggBox", "EggStation"]:
-		if _world.get_node_or_null(facility_name) != null:
-			continue
-		for facility: Dictionary in FACILITIES:
-			if String(facility["name"]) != facility_name:
-				continue
-			_add_facility(facility)
-			installed_any = true
-			break
-	if not installed_any:
-		return
-	if _interaction_controller != null:
-		if _egg_box != null:
-			_interaction_controller.register_interactable(_egg_box)
-		if _egg_station != null:
-			_interaction_controller.register_interactable(_egg_station)
-	if _navigation != null:
-		_navigation.configure(
-			MAP_SIZE,
-			DayPlayer.COLLISION_RADIUS,
-			_get_navigation_obstacle_rects()
-		)
-	if _server != null and _egg_station != null:
-		_server.set_station_position(
-			GameManager.MENU_EGG,
-			_egg_station.position
-		)
-
-
 func _install_server_if_hired() -> void:
 	if (
 		_world == null
@@ -1094,10 +1299,9 @@ func _install_server_if_hired() -> void:
 		return
 	_server = DayServerScript.new()
 	var station_positions: Dictionary = {
-		GameManager.MENU_MACKEREL: _mackerel_station.position,
+		GameManager.MENU_MACKEREL: _cooking_counter.position,
+		GameManager.MENU_EGG: _cooking_counter.position,
 	}
-	if _egg_station != null:
-		station_positions[GameManager.MENU_EGG] = _egg_station.position
 	_server.configure(
 		SERVER_START_POSITION,
 		station_positions,
@@ -1105,6 +1309,55 @@ func _install_server_if_hired() -> void:
 		_navigation
 	)
 	_world.add_child(_server)
+
+
+func _install_chef_if_hired() -> void:
+	if (
+		_world == null
+		or not GameManager.is_employee_hired(
+			GameManager.STAFF_ROLE_CHEF
+		)
+		or _chef != null
+		or _navigation == null
+	):
+		return
+	_chef = DayChefScript.new()
+	_chef.configure(
+		CHEF_START_POSITION,
+		{
+			GameManager.KITCHEN_STATION_FISH:
+				_ingredient_box.position,
+			GameManager.KITCHEN_STATION_RICE:
+				_rice_pot.position,
+			GameManager.KITCHEN_STATION_OTHER:
+				_egg_box.position,
+			GameManager.KITCHEN_STATION_COUNTER:
+				_cooking_counter.position,
+		},
+		_navigation
+	)
+	_world.add_child(_chef)
+
+
+func _sync_employees() -> void:
+	_install_server_if_hired()
+	_install_chef_if_hired()
+	if (
+		_server != null
+		and not GameManager.is_employee_hired(
+			GameManager.STAFF_ROLE_SERVICE
+		)
+	):
+		_server.queue_free()
+		_server = null
+	if (
+		_chef != null
+		and not GameManager.is_employee_hired(
+			GameManager.STAFF_ROLE_CHEF
+		)
+	):
+		_chef.queue_free()
+		_chef = null
 
 
 func _get_unlocked_seat_targets() -> Dictionary:
@@ -1127,8 +1380,6 @@ func _should_build_facility(facility_name: String) -> bool:
 		return GameManager.get_unlocked_seat_count() >= 3
 	if facility_name == "Seat4":
 		return GameManager.get_unlocked_seat_count() >= 4
-	if facility_name in ["EggBox", "EggStation"]:
-		return GameManager.is_menu_unlocked(GameManager.MENU_EGG)
 	return true
 
 
@@ -1155,6 +1406,224 @@ func _refresh_currency_hud() -> void:
 	_currency_label.text = "%d문" % int(
 		GameManager.state.get("currency", 0)
 	)
+
+
+func _refresh_employee_ui() -> void:
+	if _employee_button == null or _employee_panel == null:
+		return
+	var is_service_phase: bool = (
+		String(GameManager.state.get("screen", ""))
+		== GameManager.SCREEN_DAY
+		and String(GameManager.state.get("phase", ""))
+		== GameManager.PHASE_SERVICE
+	)
+	_employee_button.visible = is_service_phase
+	if not is_service_phase:
+		_employee_panel.visible = false
+		return
+
+	var chef_hired: bool = GameManager.is_employee_hired(
+		GameManager.STAFF_ROLE_CHEF
+	)
+	var service_hired: bool = GameManager.is_employee_hired(
+		GameManager.STAFF_ROLE_SERVICE
+	)
+	var hired_count: int = int(chef_hired) + int(service_hired)
+	_employee_button.text = "직원 %d/2" % hired_count
+	_employee_summary_label.text = (
+		"첫 주급은 고용할 때 선불입니다. 이후 7일마다 자동 지급되며, "
+		+ "지급할 돈이 부족하면 해당 직원이 퇴사합니다."
+	)
+	_refresh_employee_role_button(
+		_chef_hire_button,
+		GameManager.STAFF_ROLE_CHEF,
+		"주방장",
+		"주문 음식 자동 조리 · 조리대에 완성"
+	)
+	_refresh_employee_role_button(
+		_service_hire_button,
+		GameManager.STAFF_ROLE_SERVICE,
+		"접객",
+		"주문 접수 · 조리대 수령/서빙 · 돈 계산"
+	)
+
+
+func _refresh_employee_role_button(
+	button: Button,
+	role_id: String,
+	role_name: String,
+	description: String
+) -> void:
+	var hired: bool = GameManager.is_employee_hired(role_id)
+	var weekly_wage: int = (
+		GameManager.get_employee_weekly_wage(role_id)
+	)
+	if hired:
+		button.text = "%s · 고용 중\n%s\n다음 주급 Day %d · %d문" % [
+			role_name,
+			description,
+			GameManager.get_employee_next_wage_day(role_id),
+			weekly_wage,
+		]
+		button.disabled = true
+		return
+	button.text = "%s 고용\n%s\n첫 주급 %d문 선불" % [
+		role_name,
+		description,
+		weekly_wage,
+	]
+	button.disabled = not GameManager.can_afford_day_growth_purchase(
+		weekly_wage
+	)
+
+
+func _refresh_upgrade_ui() -> void:
+	if _upgrade_button == null or _upgrade_panel == null:
+		return
+	var is_service_phase: bool = (
+		String(GameManager.state.get("screen", ""))
+		== GameManager.SCREEN_DAY
+		and String(GameManager.state.get("phase", ""))
+		== GameManager.PHASE_SERVICE
+	)
+	_upgrade_button.visible = is_service_phase
+	if not is_service_phase:
+		_upgrade_panel.visible = false
+		return
+
+	var unlocked_menu_count: int = (
+		1
+		+ int(GameManager.is_menu_unlocked(GameManager.MENU_EGG))
+	)
+	_upgrade_button.text = "해금·성장"
+	_upgrade_summary_label.text = (
+		"좌석 %d/4 · 메뉴 %d/2\n"
+		+ "구매 즉시 좌석과 신규 주문 후보에 반영됩니다."
+	) % [
+		GameManager.get_unlocked_seat_count(),
+		unlocked_menu_count,
+	]
+	_refresh_seat_upgrade_button()
+	_refresh_menu_upgrade_button(
+		_mackerel_upgrade_button,
+		GameManager.MENU_MACKEREL
+	)
+	_refresh_menu_upgrade_button(
+		_egg_upgrade_button,
+		GameManager.MENU_EGG
+	)
+
+
+func _refresh_seat_upgrade_button() -> void:
+	var current_seats: int = GameManager.get_unlocked_seat_count()
+	if current_seats >= GameManager.MAX_SEATS:
+		_seat_upgrade_button.text = (
+			"좌석 4/4 · 설치 완료\n동시 손님 4명"
+		)
+		_seat_upgrade_button.disabled = true
+		return
+
+	var next_seat: int = current_seats + 1
+	var purchase_cost: int = GameManager.get_next_seat_cost()
+	if not GameManager.is_next_seat_purchase_available():
+		_seat_upgrade_button.text = (
+			"좌석 %d 잠김\n%s"
+			% [next_seat, GameManager.DAY_TWO_GROWTH_MESSAGE]
+		)
+		_seat_upgrade_button.disabled = true
+		return
+	_seat_upgrade_button.text = _format_upgrade_purchase_text(
+		"좌석 %d 해금" % next_seat,
+		"구매 즉시 좌석 활성화",
+		purchase_cost
+	)
+	_seat_upgrade_button.disabled = (
+		not GameManager.can_afford_day_growth_purchase(
+			purchase_cost
+		)
+	)
+
+
+func _refresh_menu_upgrade_button(
+	button: Button,
+	menu_id: String
+) -> void:
+	var current_level: int = GameManager.get_menu_station_level(
+		menu_id
+	)
+	var max_level: int = GameManager.get_menu_station_max_level(
+		menu_id
+	)
+	var menu_name: String = GameManager.get_menu_display_name(menu_id)
+	if current_level >= max_level:
+		button.text = "%s 메뉴 Lv.%d · 완료\n제작 %.1f초 · 판매 %d문" % [
+			menu_name,
+			current_level,
+			GameManager.get_menu_craft_duration(menu_id),
+			GameManager.get_menu_sale_price(menu_id),
+		]
+		button.disabled = true
+		return
+	if not GameManager.is_menu_station_purchase_available(menu_id):
+		button.text = "%s 메뉴 잠김\n%s" % [
+			menu_name,
+			GameManager.DAY_TWO_GROWTH_MESSAGE,
+		]
+		button.disabled = true
+		return
+
+	var purchase_cost: int = (
+		GameManager.get_menu_station_upgrade_cost(menu_id)
+	)
+	var title: String = (
+		"%s 메뉴 해금" % menu_name
+		if current_level <= 0
+		else "%s 메뉴 Lv.%d" % [
+			menu_name,
+			current_level + 1,
+		]
+	)
+	var description: String = (
+		"재고가 있으면 신규 손님이 바로 주문"
+		if current_level <= 0
+		else "제작 시간 감소 · 판매가 상승"
+	)
+	button.text = _format_upgrade_purchase_text(
+		title,
+		description,
+		purchase_cost
+	)
+	button.disabled = not GameManager.can_afford_day_growth_purchase(
+		purchase_cost
+	)
+
+
+func _format_upgrade_purchase_text(
+	title: String,
+	description: String,
+	purchase_cost: int
+) -> String:
+	if GameManager.is_day_growth_purchase_reserve_blocked(
+		purchase_cost
+	):
+		return "%s\n%s\n%s" % [
+			title,
+			description,
+			GameManager.OPERATING_RESERVE_MESSAGE,
+		]
+	var currency: int = int(GameManager.state.get("currency", 0))
+	if currency < purchase_cost:
+		return "%s\n%s\n%d문 필요 · 보유 %d문" % [
+			title,
+			description,
+			purchase_cost,
+			currency,
+		]
+	return "%s\n%s\n%d문" % [
+		title,
+		description,
+		purchase_cost,
+	]
 
 
 func _refresh_settlement_ui() -> void:
@@ -1208,14 +1677,20 @@ func _refresh_settlement_ui() -> void:
 		float(summary.get("waste_cost", 0.0)),
 	]
 	_settlement_progress_label.text = (
-		"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d · 점원 %s\n\n"
+		"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d\n"
+		+ "주방장 %s · 접객 %s\n\n"
 		+ "내일 약 %d~%d명 예상\n"
 		+ "내일 장사할 재료를 사러 갑니다"
 	) % [
 		GameManager.get_mackerel_station_level(),
 		GameManager.get_egg_station_level(),
 		GameManager.get_unlocked_seat_count(),
-		"고용" if GameManager.is_server_hired() else "미고용",
+		"고용" if GameManager.is_employee_hired(
+			GameManager.STAFF_ROLE_CHEF
+		) else "미고용",
+		"고용" if GameManager.is_employee_hired(
+			GameManager.STAFF_ROLE_SERVICE
+		) else "미고용",
 		int(summary.get("next_customer_min", 18)),
 		int(summary.get("next_customer_max", 22)),
 	]

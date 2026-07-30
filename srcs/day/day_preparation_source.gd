@@ -2,8 +2,8 @@ extends DayInteractable
 class_name DayPreparationSource
 
 enum SourceKind {
-	MACKEREL,
-	EGG,
+	FISH,
+	OTHER,
 	RICE,
 }
 
@@ -12,7 +12,7 @@ const HIGHLIGHT_COLOR: Color = Color("f2c94c")
 const TEXT_COLOR: Color = Color("35291f")
 const BLOCKED_COLOR: Color = Color("8f3d32")
 
-var source_kind: SourceKind = SourceKind.MACKEREL
+var source_kind: SourceKind = SourceKind.FISH
 var facility_size: Vector2 = Vector2(140.0, 96.0)
 var base_color: Color = Color("79986b")
 var facility_label: String = "재료"
@@ -76,12 +76,18 @@ func get_interaction_distance_squared(
 
 
 func interaction_entered(_player: DayPlayer) -> void:
-	if source_kind == SourceKind.MACKEREL:
-		GameManager.try_collect_mackerel_for_order()
-	elif source_kind == SourceKind.EGG:
-		GameManager.try_collect_egg_for_order()
+	if source_kind == SourceKind.FISH:
+		GameManager.try_process_kitchen_station(
+			GameManager.KITCHEN_STATION_FISH
+		)
+	elif source_kind == SourceKind.OTHER:
+		GameManager.try_process_kitchen_station(
+			GameManager.KITCHEN_STATION_OTHER
+		)
 	else:
-		GameManager.try_collect_rice_for_order()
+		GameManager.try_process_kitchen_station(
+			GameManager.KITCHEN_STATION_RICE
+		)
 
 
 func set_interaction_highlighted(highlighted: bool) -> void:
@@ -94,9 +100,9 @@ func _is_current_step() -> bool:
 	var current_step: String = String(
 		carried_item.get("step", "")
 	)
-	if source_kind == SourceKind.MACKEREL:
+	if source_kind == SourceKind.FISH:
 		return current_step == GameManager.PREP_NEED_MACKEREL
-	if source_kind == SourceKind.EGG:
+	if source_kind == SourceKind.OTHER:
 		return current_step == GameManager.PREP_NEED_EGG
 	return current_step == GameManager.PREP_NEED_RICE
 
@@ -149,36 +155,36 @@ func _refresh_visual() -> void:
 	var prep_step: String = String(carried_item.get("step", ""))
 	var status_text: String
 	var status_color: Color = TEXT_COLOR
-	if source_kind == SourceKind.MACKEREL:
+	if source_kind == SourceKind.FISH:
 		if prep_step == GameManager.PREP_NEED_MACKEREL:
-			status_text = "고등어 받기"
+			status_text = "생선 받기"
 		elif prep_step in [
 			GameManager.PREP_NEED_RICE,
 			GameManager.PREP_READY_TO_COOK,
 			GameManager.PREP_COOKING,
 		]:
-			status_text = "고등어 완료"
+			status_text = "생선 완료"
 		else:
 			status_text = "주문 필요"
-	elif source_kind == SourceKind.EGG:
+	elif source_kind == SourceKind.OTHER:
 		if prep_step == GameManager.PREP_NEED_EGG:
-			status_text = "계란 받기"
+			status_text = "기타요리 받기"
 		elif prep_step in [
 			GameManager.PREP_NEED_RICE,
 			GameManager.PREP_READY_TO_COOK,
 			GameManager.PREP_COOKING,
 		]:
-			status_text = "계란 완료"
+			status_text = "기타요리 완료"
 		else:
 			status_text = "주문 필요"
 	else:
 		if prep_step == GameManager.PREP_NEED_RICE:
 			status_text = "밥 받기"
 		elif prep_step == GameManager.PREP_NEED_MACKEREL:
-			status_text = "고등어 먼저"
+			status_text = "생선류 먼저"
 			status_color = BLOCKED_COLOR
 		elif prep_step == GameManager.PREP_NEED_EGG:
-			status_text = "계란 먼저"
+			status_text = "기타요리 먼저"
 			status_color = BLOCKED_COLOR
 		elif prep_step in [
 			GameManager.PREP_READY_TO_COOK,

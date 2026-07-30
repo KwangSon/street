@@ -37,82 +37,88 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_node("World/StageCamera"))
 	assert_not_null(screen.get_node("World/InteractionController"))
 	assert_not_null(screen.get_node("World/CustomerManager"))
-	assert_not_null(screen.get_mackerel_station())
-	assert_not_null(screen.get_mackerel_upgrade_pad())
-	assert_not_null(screen.get_egg_upgrade_pad())
-	assert_not_null(screen.get_seat_purchase_pad())
-	assert_not_null(screen.get_staff_hire_pad())
-	assert_null(screen.get_egg_station())
-	assert_null(screen.get_egg_box())
+	assert_not_null(screen.get_cooking_counter())
+	assert_not_null(screen.get_egg_box())
 	assert_null(screen.get_server())
+	assert_null(screen.get_chef())
+	assert_not_null(screen.get_node("World/FishStation"))
+	assert_not_null(screen.get_node("World/RiceStation"))
+	assert_not_null(screen.get_node("World/OtherStation"))
+	assert_not_null(screen.get_node("World/CookingCounter"))
+	assert_null(screen.get_node_or_null("World/EggStation"))
+	assert_null(screen.get_node_or_null("World/MackerelStation"))
 	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_null(screen.get_node_or_null("World/Seat3"))
 	assert_null(screen.get_node_or_null("World/Seat4"))
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_not_null(screen.get_early_close_button())
+	assert_not_null(screen.get_employee_button())
+	assert_not_null(screen.get_employee_panel())
+	assert_not_null(screen.get_upgrade_button())
+	assert_not_null(screen.get_upgrade_panel())
+	assert_not_null(screen.get_seat_upgrade_button())
+	assert_not_null(screen.get_mackerel_upgrade_button())
+	assert_not_null(screen.get_egg_upgrade_button())
+	assert_null(screen.get_node_or_null("World/MackerelUpgradePad"))
+	assert_null(screen.get_node_or_null("World/EggUpgradePad"))
+	assert_null(screen.get_node_or_null("World/Seat2PurchasePad"))
 	assert_eq(screen.get_early_close_button().text, "조기 마감")
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
 
 
-func test_upgrade_pad_explains_operating_reserve_block() -> void:
+func test_upgrade_ui_explains_operating_reserve_block() -> void:
 	GameManager.state["currency"] = 21
 	var screen: DayScreen = await _create_screen()
-	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
-	screen.get_player().position = pad.position
-
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
 
 	assert_eq(GameManager.get_mackerel_station_level(), 1)
 	assert_eq(GameManager.state["currency"], 21)
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
+		screen.get_mackerel_upgrade_button().text,
 		"밑천 10문"
 	)
+	assert_true(screen.get_mackerel_upgrade_button().disabled)
 
 
-func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
+func test_upgrade_ui_buys_level_two_and_refreshes_screen() -> void:
 	GameManager.state["currency"] = 22
 	var screen: DayScreen = await _create_screen()
-	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
-	screen.get_player().position = pad.position
-
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_mackerel_upgrade_button().emit_signal("pressed")
 
 	assert_eq(GameManager.get_mackerel_station_level(), 2)
 	assert_eq(GameManager.state["currency"], 10)
-	assert_eq(screen.get_mackerel_station().craft_duration, 3.0)
+	assert_eq(screen.get_cooking_counter().craft_duration, 3.0)
 	assert_eq(
-		screen.get_mackerel_station().get_node("Label").text,
-		"고등어 조리대 Lv.2"
+		screen.get_cooking_counter().get_node("Label").text,
+		"조리대"
 	)
 	assert_eq(
 		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
 		"10문"
 	)
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
+		screen.get_mackerel_upgrade_button().text,
 		"판매 7문"
 	)
 
 
-func test_seat_pad_explains_operating_reserve_block() -> void:
+func test_upgrade_ui_blocks_seat_when_reserve_would_be_spent() -> void:
 	GameManager.state["currency"] = 33
 	var screen: DayScreen = await _create_screen()
-	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
-	screen.get_player().position = pad.position
-
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 1)
 	assert_eq(GameManager.state["currency"], 33)
 	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
+		screen.get_seat_upgrade_button().text,
 		"밑천 10문"
 	)
+	assert_true(screen.get_seat_upgrade_button().disabled)
 
 
-func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
+func test_upgrade_ui_installs_second_seat_and_promotes_fifo_queue() -> void:
 	GameManager.state["currency"] = 34
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (
@@ -130,9 +136,9 @@ func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
 		]
 	)
 
-	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
-	screen.get_player().position = pad.position
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_seat_upgrade_button().emit_signal("pressed")
+	await wait_process_frames(1)
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 2)
 	assert_eq(GameManager.state["currency"], 10)
@@ -155,11 +161,16 @@ func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
 		[
 			"customer_3",
 			"customer_4",
-			"customer_5",
 		]
 	)
-	assert_eq(pad.get_node("TitleLabel").text, "좌석 3 구매")
-	assert_string_contains(pad.get_node("StatusLabel").text, "Day 2")
+	assert_string_contains(
+		screen.get_seat_upgrade_button().text,
+		"좌석 3 잠김"
+	)
+	assert_string_contains(
+		screen.get_seat_upgrade_button().text,
+		"Day 2"
+	)
 
 	assert_true(
 		screen.request_player_move_to_world(
@@ -185,67 +196,93 @@ func test_loaded_second_seat_exists_before_customer_spawn() -> void:
 	assert_true(screen.get_customer_manager().has_seat("seat_2"))
 
 
-func test_seat_pad_installs_third_and_fourth_seats_in_order() -> void:
+func test_upgrade_ui_installs_third_and_fourth_seats_in_order() -> void:
 	GameManager.state["day"] = 2
 	GameManager.state["progression"]["seats"] = 2
 	GameManager.state["currency"] = 215
 	var screen: DayScreen = await _create_screen()
-	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
-
-	screen.get_player().position = pad.position
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_seat_upgrade_button().emit_signal("pressed")
+	await wait_process_frames(1)
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 3)
 	assert_eq(GameManager.state["currency"], 150)
 	assert_not_null(screen.get_node_or_null("World/Seat3"))
 	assert_true(screen.get_customer_manager().has_seat("seat_3"))
-	assert_eq(pad.get_node("TitleLabel").text, "좌석 4 구매")
-	assert_string_contains(pad.get_node("StatusLabel").text, "140문")
+	assert_string_contains(
+		screen.get_seat_upgrade_button().text,
+		"좌석 4 해금"
+	)
+	assert_string_contains(
+		screen.get_seat_upgrade_button().text,
+		"140문"
+	)
 
-	screen.get_player().position = Vector2(360.0, 620.0)
-	await wait_physics_frames(2)
-	screen.get_player().position = pad.position
-	await wait_physics_frames(70)
+	screen.get_seat_upgrade_button().emit_signal("pressed")
+	await wait_process_frames(1)
 
 	assert_eq(GameManager.get_unlocked_seat_count(), 4)
 	assert_eq(GameManager.state["currency"], 10)
 	assert_not_null(screen.get_node_or_null("World/Seat4"))
 	assert_true(screen.get_customer_manager().has_seat("seat_4"))
-	assert_eq(pad.get_node("TitleLabel").text, "좌석 4 설치 완료")
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
+		screen.get_seat_upgrade_button().text,
 		"동시 손님 4명"
 	)
 
 
-func test_egg_upgrade_pad_unlocks_menu_facilities_for_eighty_mon() -> void:
+func test_upgrade_ui_unlocks_egg_menu_for_eighty_mon() -> void:
 	GameManager.state["day"] = 2
 	GameManager.state["currency"] = 90
+	GameManager.state["inventory"]["ready"]["egg"] = 5
 	var screen: DayScreen = await _create_screen()
-	var pad: DayUpgradePad = screen.get_egg_upgrade_pad()
-
-	assert_eq(pad.get_node("TitleLabel").text, "계란 메뉴 해금")
-	screen.get_player().position = pad.position
-	await wait_physics_frames(70)
+	screen.get_upgrade_button().emit_signal("pressed")
+	assert_string_contains(
+		screen.get_egg_upgrade_button().text,
+		"계란 메뉴 해금"
+	)
+	screen.get_egg_upgrade_button().emit_signal("pressed")
 
 	assert_eq(GameManager.get_egg_station_level(), 1)
 	assert_eq(GameManager.state["currency"], 10)
-	assert_not_null(screen.get_egg_station())
+	assert_not_null(screen.get_cooking_counter())
 	assert_not_null(screen.get_egg_box())
-	assert_not_null(screen.get_node_or_null("World/EggStation"))
-	assert_not_null(screen.get_node_or_null("World/EggBox"))
-	assert_eq(pad.get_node("TitleLabel").text, "계란 조리대 Lv.2")
+	assert_not_null(screen.get_node_or_null("World/OtherStation"))
+	assert_string_contains(
+		screen.get_egg_upgrade_button().text,
+		"계란 메뉴 Lv.2"
+	)
 	assert_string_contains(
 		screen.get_node("FixedUI/HUD/InventoryLabel").text,
-		"계란 0"
+		"계란 5"
 	)
+	assert_eq(
+		GameManager.choose_menu_for_customer("customer_11"),
+		GameManager.MENU_EGG
+	)
+
+
+func test_bottom_growth_panels_are_exclusive_and_do_not_move_player() -> void:
+	var screen: DayScreen = await _create_screen()
+	screen.get_employee_button().emit_signal("pressed")
+	assert_true(screen.get_employee_panel().visible)
+
+	screen.get_upgrade_button().emit_signal("pressed")
+	assert_false(screen.get_employee_panel().visible)
+	assert_true(screen.get_upgrade_panel().visible)
+
+	var button_center: Vector2 = (
+		screen.get_upgrade_button().position
+		+ screen.get_upgrade_button().size * 0.5
+	)
+	screen._input(_mouse_button_event(button_center, true))
+	screen._input(_mouse_button_event(button_center, false))
+	assert_false(screen.get_player().has_destination())
 
 
 func test_hired_server_collects_and_serves_egg_plate() -> void:
 	GameManager.state["day"] = 3
 	GameManager.state["progression"]["egg_station_level"] = 1
-	GameManager.state["progression"]["server_hired"] = true
-	GameManager.state["progression"]["server_speed_level"] = 1
 	GameManager.state["inventory"]["ready"] = {
 		"rice": 5,
 		"mackerel": 0,
@@ -265,7 +302,14 @@ func test_hired_server_collects_and_serves_egg_plate() -> void:
 	assert_true(GameManager.try_accept_waiting_order("customer_1"))
 	assert_true(GameManager.try_collect_egg_for_order())
 	assert_true(GameManager.try_collect_rice_for_order())
-	var egg_station: MackerelStation = screen.get_egg_station()
+	GameManager.state["currency"] = 55
+	assert_true(
+		GameManager.try_hire_employee(
+			GameManager.STAFF_ROLE_SERVICE
+		)
+	)
+	await wait_process_frames(1)
+	var egg_station: CookingCounter = screen.get_cooking_counter()
 	egg_station.interaction_entered(screen.get_player())
 	egg_station.interaction_tick(screen.get_player(), 4.1)
 	assert_true(GameManager.has_station_item())
@@ -292,43 +336,75 @@ func test_hired_server_collects_and_serves_egg_plate() -> void:
 	assert_true(GameManager.get_server_carried_item().is_empty())
 
 
-func test_staff_pad_explains_operating_reserve_block() -> void:
+func test_employee_ui_explains_operating_reserve_block() -> void:
 	GameManager.state["currency"] = 54
 	var screen: DayScreen = await _create_screen()
-	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
-	screen.get_player().position = pad.position
-
-	await wait_physics_frames(70)
+	screen.get_employee_button().emit_signal("pressed")
 
 	assert_false(GameManager.is_server_hired())
 	assert_eq(GameManager.state["currency"], 54)
 	assert_null(screen.get_server())
+	assert_true(screen.get_service_hire_button().disabled)
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
-		"밑천 10문"
+		screen.get_service_hire_button().text,
+		"첫 주급 45문 선불"
 	)
 
 
-func test_staff_pad_hires_one_server_and_refreshes_hud() -> void:
+func test_employee_ui_hires_service_and_refreshes_hud() -> void:
 	GameManager.state["currency"] = 55
 	var screen: DayScreen = await _create_screen()
-	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
-	screen.get_player().position = pad.position
-
-	await wait_physics_frames(70)
+	screen.get_employee_button().emit_signal("pressed")
+	screen.get_service_hire_button().emit_signal("pressed")
+	await wait_process_frames(1)
 
 	assert_true(GameManager.is_server_hired())
 	assert_eq(GameManager.state["currency"], 10)
 	assert_not_null(screen.get_server())
 	assert_eq(
+		GameManager.get_employee_next_wage_day(
+			GameManager.STAFF_ROLE_SERVICE
+		),
+		8
+	)
+	assert_eq(
 		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
 		"10문"
 	)
 	assert_string_contains(
-		pad.get_node("StatusLabel").text,
-		"자동 서빙"
+		screen.get_service_hire_button().text,
+		"주문 접수"
 	)
 	assert_false(GameManager.try_hire_server())
+
+
+func test_chef_and_service_complete_one_sale_without_player_work() -> void:
+	Engine.time_scale = ACCELERATED_TIME_SCALE
+	GameManager.state["currency"] = 115
+	var screen: DayScreen = await _create_screen()
+	screen.get_employee_button().emit_signal("pressed")
+	screen.get_chef_hire_button().emit_signal("pressed")
+	screen.get_service_hire_button().emit_signal("pressed")
+
+	var elapsed_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return (
+				int(
+					GameManager.state["day_stats"]["plates_sold"][
+						GameManager.MENU_MACKEREL
+					]
+				)
+				>= 1
+			),
+		900
+	)
+	Engine.time_scale = 1.0
+
+	assert_lte(elapsed_frames, 900)
+	assert_not_null(screen.get_chef())
+	assert_not_null(screen.get_server())
+	assert_eq(GameManager.state["currency"], 16)
+	assert_true(GameManager.get_chef_active_order().is_empty())
 
 
 func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
@@ -606,7 +682,7 @@ func test_screen_customer_queue_stops_at_three_waiting() -> void:
 
 func test_station_approach_without_order_does_not_start_crafting() -> void:
 	var screen: DayScreen = await _create_screen()
-	var station: MackerelStation = screen.get_mackerel_station()
+	var station: CookingCounter = screen.get_cooking_counter()
 	screen.get_player().position = Vector2(
 		station.position.x,
 		station.position.y + 80.0
@@ -678,7 +754,7 @@ func test_order_mackerel_rice_station_sequence_starts_crafting() -> void:
 	)
 	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 19)
 
-	var station: MackerelStation = screen.get_mackerel_station()
+	var station: CookingCounter = screen.get_cooking_counter()
 	screen.get_player().position = (
 		station.position + Vector2(0.0, 80.0)
 	)
@@ -859,11 +935,8 @@ func test_first_upgrade_is_bought_with_real_movement_under_sixty_seconds() -> vo
 
 	assert_eq(GameManager.state["currency"], 24)
 	assert_eq(GameManager.get_mackerel_station_level(), 1)
-	assert_true(
-		screen.request_player_move_to_world(
-			screen.get_mackerel_upgrade_pad().position
-		)
-	)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_mackerel_upgrade_button().emit_signal("pressed")
 	var upgrade_frames: int = await _wait_for_condition(
 		func() -> bool:
 			return GameManager.get_mackerel_station_level() == 2,
@@ -886,7 +959,7 @@ func test_first_upgrade_is_bought_with_real_movement_under_sixty_seconds() -> vo
 	)
 
 
-func test_first_staff_is_hired_with_real_growth_path_under_five_minutes() -> void:
+func test_first_staff_is_hired_with_growth_path_under_five_minutes() -> void:
 	Engine.time_scale = ACCELERATED_TIME_SCALE
 	var service_started_at: float = float(
 		GameManager.state["service_time_remaining"]
@@ -899,11 +972,8 @@ func test_first_staff_is_hired_with_real_growth_path_under_five_minutes() -> voi
 			"customer_%d" % customer_number
 		)
 
-	assert_true(
-		screen.request_player_move_to_world(
-			screen.get_mackerel_upgrade_pad().position
-		)
-	)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_mackerel_upgrade_button().emit_signal("pressed")
 	var growth_frames: int = await _wait_for_condition(
 		func() -> bool:
 			return GameManager.get_mackerel_station_level() == 2,
@@ -917,11 +987,8 @@ func test_first_staff_is_hired_with_real_growth_path_under_five_minutes() -> voi
 			"customer_%d" % customer_number
 		)
 
-	assert_true(
-		screen.request_player_move_to_world(
-			screen.get_seat_purchase_pad().position
-		)
-	)
+	screen.get_upgrade_button().emit_signal("pressed")
+	screen.get_seat_upgrade_button().emit_signal("pressed")
 	growth_frames = await _wait_for_condition(
 		func() -> bool:
 			return GameManager.get_unlocked_seat_count() == 2,
@@ -935,11 +1002,8 @@ func test_first_staff_is_hired_with_real_growth_path_under_five_minutes() -> voi
 			"customer_%d" % customer_number
 		)
 
-	assert_true(
-		screen.request_player_move_to_world(
-			screen.get_staff_hire_pad().position
-		)
-	)
+	screen.get_employee_button().emit_signal("pressed")
+	screen.get_service_hire_button().emit_signal("pressed")
 	growth_frames = await _wait_for_condition(
 		func() -> bool:
 			return GameManager.is_server_hired(),
@@ -1383,7 +1447,7 @@ func _complete_real_movement_sale(
 
 	assert_true(
 		screen.request_player_move_to_world(
-			screen.get_mackerel_station().position
+			screen.get_cooking_counter().position
 		)
 	)
 	waited_frames = await _wait_for_condition(

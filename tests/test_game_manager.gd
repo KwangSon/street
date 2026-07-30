@@ -724,9 +724,9 @@ func test_unlocked_egg_order_consumes_egg_and_pays_egg_price() -> void:
 	assert_eq(GameManager.state["totals"]["plates_sold"]["egg"], 1)
 
 
-func test_day_three_menu_selection_uses_seventy_thirty_mix() -> void:
+func test_unlocked_menu_immediately_uses_seventy_thirty_mix() -> void:
 	GameManager.state = GameManager.create_default_game_state()
-	GameManager.state["day"] = 3
+	GameManager.state["day"] = 2
 	GameManager.state["progression"]["egg_station_level"] = 1
 	GameManager.state["inventory"]["ready"] = {
 		"rice": 20,
@@ -1175,6 +1175,128 @@ func test_locked_egg_menu_cannot_be_ordered() -> void:
 	assert_eq(
 		GameManager.get_day_customer(customer_id)["state"],
 		GameManager.CUSTOMER_MOVING_TO_SEAT
+	)
+
+
+func test_kitchen_has_four_fixed_stations_and_menu_routes() -> void:
+	assert_eq(
+		GameManager.KITCHEN_STATIONS,
+		[
+			GameManager.KITCHEN_STATION_FISH,
+			GameManager.KITCHEN_STATION_RICE,
+			GameManager.KITCHEN_STATION_OTHER,
+			GameManager.KITCHEN_STATION_COUNTER,
+		]
+	)
+	assert_eq(
+		GameManager.get_menu_kitchen_route(
+			GameManager.MENU_MACKEREL
+		),
+		[
+			GameManager.KITCHEN_STATION_FISH,
+			GameManager.KITCHEN_STATION_RICE,
+			GameManager.KITCHEN_STATION_COUNTER,
+		]
+	)
+	assert_eq(
+		GameManager.get_menu_kitchen_route(GameManager.MENU_EGG),
+		[
+			GameManager.KITCHEN_STATION_OTHER,
+			GameManager.KITCHEN_STATION_RICE,
+			GameManager.KITCHEN_STATION_COUNTER,
+		]
+	)
+
+
+func test_employee_hire_prepays_wage_and_renews_every_seven_days() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 125
+
+	assert_true(
+		GameManager.try_hire_employee(GameManager.STAFF_ROLE_CHEF)
+	)
+	assert_true(
+		GameManager.try_hire_employee(
+			GameManager.STAFF_ROLE_SERVICE
+		)
+	)
+	assert_eq(GameManager.state["currency"], 20)
+	assert_eq(
+		GameManager.get_employee_next_wage_day(
+			GameManager.STAFF_ROLE_CHEF
+		),
+		8
+	)
+
+	GameManager.state["day"] = 8
+	GameManager.state["currency"] = 60
+	var wage_result: Dictionary = (
+		GameManager.process_due_weekly_wages()
+	)
+
+	assert_eq(wage_result["paid"], [GameManager.STAFF_ROLE_CHEF])
+	assert_eq(
+		wage_result["departed"],
+		[GameManager.STAFF_ROLE_SERVICE]
+	)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_true(
+		GameManager.is_employee_hired(GameManager.STAFF_ROLE_CHEF)
+	)
+	assert_false(GameManager.is_server_hired())
+	assert_eq(
+		GameManager.get_employee_next_wage_day(
+			GameManager.STAFF_ROLE_CHEF
+		),
+		15
+	)
+
+
+func test_chef_follows_recipe_route_and_finishes_at_counter() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 70
+	assert_true(
+		GameManager.try_hire_employee(GameManager.STAFF_ROLE_CHEF)
+	)
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_false(GameManager.is_player_carrying_item())
+	assert_eq(
+		GameManager.get_chef_next_station_id(),
+		GameManager.KITCHEN_STATION_FISH
+	)
+	assert_true(
+		GameManager.try_chef_process_station(
+			GameManager.KITCHEN_STATION_FISH
+		)
+	)
+	assert_true(
+		GameManager.try_chef_process_station(
+			GameManager.KITCHEN_STATION_RICE
+		)
+	)
+	assert_true(GameManager.try_chef_start_counter_work())
+	assert_true(GameManager.complete_chef_order_at_counter())
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_READY_TO_SERVE
+	)
+	assert_eq(
+		GameManager.get_station_item()["customer_id"],
+		customer_id
 	)
 
 

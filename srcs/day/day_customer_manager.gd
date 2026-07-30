@@ -72,6 +72,13 @@ func get_payment(customer_id: String) -> DayPayment:
 	return _payments.get(customer_id) as DayPayment
 
 
+func collect_payment_by_staff(customer_id: String) -> bool:
+	if not GameManager.collect_customer_payment(customer_id):
+		return false
+	_on_payment_collected(customer_id)
+	return true
+
+
 func add_seat(seat_id: String, seat_target: Vector2) -> bool:
 	if seat_id.is_empty() or _seat_targets.has(seat_id):
 		return false

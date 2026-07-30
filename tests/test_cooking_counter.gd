@@ -3,8 +3,8 @@ extends GutTest
 const DayPlayerScript: Script = preload(
 	"res://srcs/day/day_player.gd"
 )
-const MackerelStationScript: Script = preload(
-	"res://srcs/day/mackerel_station.gd"
+const CookingCounterScript: Script = preload(
+	"res://srcs/day/cooking_counter.gd"
 )
 
 
@@ -18,7 +18,7 @@ func after_each() -> void:
 
 func test_station_does_not_craft_without_order_and_collected_food() -> void:
 	var fixture: Dictionary = await _create_fixture()
-	var station: MackerelStation = fixture["station"]
+	var station: CookingCounter = fixture["station"]
 	var player: DayPlayer = fixture["player"]
 
 	station.interaction_entered(player)
@@ -35,7 +35,7 @@ func test_station_rejects_order_before_mackerel_and_rice() -> void:
 	var customer_id: String = _create_waiting_order()
 	assert_true(GameManager.try_accept_waiting_order(customer_id))
 	var fixture: Dictionary = await _create_fixture()
-	var station: MackerelStation = fixture["station"]
+	var station: CookingCounter = fixture["station"]
 	var player: DayPlayer = fixture["player"]
 
 	station.interaction_entered(player)
@@ -50,7 +50,7 @@ func test_station_rejects_order_before_mackerel_and_rice() -> void:
 func test_collected_mackerel_and_rice_start_single_craft() -> void:
 	var customer_id: String = _prepare_order_for_cooking()
 	var fixture: Dictionary = await _create_fixture(0.1)
-	var station: MackerelStation = fixture["station"]
+	var station: CookingCounter = fixture["station"]
 	var player: DayPlayer = fixture["player"]
 
 	station.interaction_entered(player)
@@ -86,7 +86,7 @@ func test_collected_mackerel_and_rice_start_single_craft() -> void:
 func test_leaving_pauses_and_reentering_resumes_same_order() -> void:
 	var customer_id: String = _prepare_order_for_cooking()
 	var fixture: Dictionary = await _create_fixture(0.1)
-	var station: MackerelStation = fixture["station"]
+	var station: CookingCounter = fixture["station"]
 	var player: DayPlayer = fixture["player"]
 
 	station.interaction_entered(player)
@@ -142,7 +142,7 @@ func _prepare_order_for_cooking() -> String:
 
 
 func _create_fixture(
-	craft_duration: float = MackerelStation.DEFAULT_CRAFT_DURATION
+	craft_duration: float = CookingCounter.DEFAULT_CRAFT_DURATION
 ) -> Dictionary:
 	var fixture_root: Node2D = Node2D.new()
 	add_child_autofree(fixture_root)
@@ -150,7 +150,7 @@ func _create_fixture(
 	var player: DayPlayer = DayPlayerScript.new()
 	fixture_root.add_child(player)
 
-	var station: MackerelStation = MackerelStationScript.new()
+	var station: CookingCounter = CookingCounterScript.new()
 	station.use_game_manager_tuning = false
 	station.craft_duration = craft_duration
 	fixture_root.add_child(station)

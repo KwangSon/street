@@ -13,6 +13,39 @@ const MENU_EGG: String = "egg"
 const CARRIED_KIND_PLATE: String = "plate"
 const CARRIED_KIND_ORDER_PREP: String = "order_prep"
 
+const KITCHEN_STATION_FISH: String = "fish"
+const KITCHEN_STATION_RICE: String = "rice"
+const KITCHEN_STATION_OTHER: String = "other"
+const KITCHEN_STATION_COUNTER: String = "counter"
+const KITCHEN_STATIONS: Array[String] = [
+	KITCHEN_STATION_FISH,
+	KITCHEN_STATION_RICE,
+	KITCHEN_STATION_OTHER,
+	KITCHEN_STATION_COUNTER,
+]
+const MENU_KITCHEN_ROUTES: Dictionary = {
+	MENU_MACKEREL: [
+		KITCHEN_STATION_FISH,
+		KITCHEN_STATION_RICE,
+		KITCHEN_STATION_COUNTER,
+	],
+	MENU_EGG: [
+		KITCHEN_STATION_OTHER,
+		KITCHEN_STATION_RICE,
+		KITCHEN_STATION_COUNTER,
+	],
+}
+
+const STAFF_ROLE_CHEF: String = "chef"
+const STAFF_ROLE_SERVICE: String = "service"
+const STAFF_ROLES: Array[String] = [
+	STAFF_ROLE_CHEF,
+	STAFF_ROLE_SERVICE,
+]
+const CHEF_WEEKLY_WAGE: int = 60
+const SERVICE_WEEKLY_WAGE: int = 45
+const WAGE_PERIOD_DAYS: int = 7
+
 const CUSTOMER_ENTERING: String = "entering"
 const CUSTOMER_WAITING_IN_QUEUE: String = "waiting_in_queue"
 const CUSTOMER_MOVING_TO_SEAT: String = "moving_to_seat"
@@ -38,7 +71,7 @@ const SECOND_SEAT_COST: int = 24
 const THIRD_SEAT_COST: int = 65
 const FOURTH_SEAT_COST: int = 140
 const MAX_SEATS: int = 4
-const SERVER_HIRE_COST: int = 45
+const SERVER_HIRE_COST: int = SERVICE_WEEKLY_WAGE
 const OPERATING_RESERVE: int = 10
 const OPERATING_RESERVE_MESSAGE: String = (
 	"내일 장사 밑천 10문은 남겨두어야 합니다."
@@ -116,11 +149,14 @@ const SEAT_COSTS: Dictionary = {
 }
 const MAX_CUSTOMER_QUEUE: int = 3
 
-const PREP_NEED_MACKEREL: String = "need_mackerel"
-const PREP_NEED_EGG: String = "need_egg"
+const PREP_NEED_FISH: String = "need_mackerel"
+const PREP_NEED_OTHER: String = "need_egg"
 const PREP_NEED_RICE: String = "need_rice"
-const PREP_READY_TO_COOK: String = "ready_to_cook"
+const PREP_READY_FOR_COUNTER: String = "ready_to_cook"
 const PREP_COOKING: String = "cooking"
+const PREP_NEED_MACKEREL: String = PREP_NEED_FISH
+const PREP_NEED_EGG: String = PREP_NEED_OTHER
+const PREP_READY_TO_COOK: String = PREP_READY_FOR_COUNTER
 
 const PHASE_SERVICE: String = "service"
 const PHASE_SETTLEMENT: String = "settlement"
@@ -169,6 +205,14 @@ func create_default_game_state() -> Dictionary:
 			"seats": 1,
 			"server_hired": false,
 			"server_speed_level": 0,
+			"employees": {
+				STAFF_ROLE_CHEF: _create_employee_state(
+					STAFF_ROLE_CHEF
+				),
+				STAFF_ROLE_SERVICE: _create_employee_state(
+					STAFF_ROLE_SERVICE
+				),
+			},
 			"stall_tier": 1,
 			"stage_completed": false,
 		},
@@ -198,6 +242,7 @@ func apply_loaded_game_state(data: Dictionary) -> bool:
 	loaded_state["save_version"] = int(loaded_state["save_version"])
 	loaded_state["day"] = int(loaded_state["day"])
 	state = loaded_state
+	_ensure_employee_state()
 	_ensure_day_runtime_state()
 	if String(state.get("screen", "")) == SCREEN_DAWN:
 		_ensure_dawn_runtime_state()
@@ -669,6 +714,7 @@ func complete_dawn_and_start_day() -> bool:
 	if not can_finish_dawn_preparation():
 		return false
 	state["day"] = int(state.get("day", 1)) + 1
+	process_due_weekly_wages()
 	state["screen"] = SCREEN_DAY
 	state["phase"] = PHASE_SERVICE
 	state["service_time_remaining"] = 300.0
@@ -822,9 +868,24 @@ func get_waiting_orders() -> Array[Dictionary]:
 	return waiting_orders
 
 
+func get_menu_kitchen_route(menu_id: String) -> Array[String]:
+	var route: Array[String] = []
+	var route_value: Variant = MENU_KITCHEN_ROUTES.get(menu_id, [])
+	if not route_value is Array:
+		return route
+	for station_id: Variant in route_value:
+		route.append(String(station_id))
+	return route
+
+
 func try_accept_waiting_order(customer_id: String) -> bool:
 	_ensure_day_runtime_state()
 	if is_player_carrying_item() or has_station_item():
+		return false
+	if (
+		is_employee_hired(STAFF_ROLE_CHEF)
+		and not get_chef_active_order().is_empty()
+	):
 		return false
 
 	var day_runtime: Dictionary = state["day_runtime"]
@@ -851,46 +912,90 @@ func try_accept_waiting_order(customer_id: String) -> bool:
 
 	order["status"] = ORDER_PREPARING
 	customer["state"] = CUSTOMER_WAITING_FOR_FOOD
+	var route: Array[String] = get_menu_kitchen_route(menu_id)
+	if route.is_empty():
+		return false
+	if is_employee_hired(STAFF_ROLE_CHEF):
+		order["prepared_by"] = STAFF_ROLE_CHEF
+		day_runtime["chef_order"] = {
+			"customer_id": customer_id,
+			"menu": menu_id,
+			"route_index": 0,
+		}
+		state_changed.emit()
+		return true
 	day_runtime["carried_item"] = {
 		"kind": CARRIED_KIND_ORDER_PREP,
 		"menu": menu_id,
 		"count": 1,
 		"customer_id": customer_id,
-		"step": (
-			PREP_NEED_EGG
-			if menu_id == MENU_EGG
-			else PREP_NEED_MACKEREL
-		),
+		"route_index": 0,
+		"step": _get_prep_step_for_station(route[0]),
 	}
 	state_changed.emit()
 	return true
 
 
 func try_collect_mackerel_for_order() -> bool:
-	return _try_collect_topping_for_order(
-		MENU_MACKEREL,
-		PREP_NEED_MACKEREL
-	)
+	return try_process_kitchen_station(KITCHEN_STATION_FISH)
 
 
 func try_collect_egg_for_order() -> bool:
-	return _try_collect_topping_for_order(
-		MENU_EGG,
-		PREP_NEED_EGG
-	)
+	return try_process_kitchen_station(KITCHEN_STATION_OTHER)
 
 
 func try_collect_rice_for_order() -> bool:
+	return try_process_kitchen_station(KITCHEN_STATION_RICE)
+
+
+func try_process_kitchen_station(station_id: String) -> bool:
+	if station_id not in KITCHEN_STATIONS:
+		return false
 	var carried_item: Dictionary = get_carried_item()
-	if not _is_prep_at_step(carried_item, PREP_NEED_RICE):
+	if (
+		String(carried_item.get("kind", ""))
+		!= CARRIED_KIND_ORDER_PREP
+	):
 		return false
 
+	var menu_id: String = String(carried_item.get("menu", ""))
+	var route: Array[String] = get_menu_kitchen_route(menu_id)
+	var route_index: int = _get_carried_route_index(
+		carried_item,
+		route
+	)
+	if (
+		route_index < 0
+		or route_index >= route.size()
+		or route[route_index] != station_id
+	):
+		return false
+	if station_id == KITCHEN_STATION_COUNTER:
+		return try_start_active_order_craft(menu_id)
+
+	var material_id: String = _get_menu_station_material(
+		menu_id,
+		station_id
+	)
+	if material_id.is_empty():
+		return false
 	var ready_inventory: Dictionary = _get_ready_inventory()
-	if int(ready_inventory.get("rice", 0)) < 1:
+	if not _has_route_materials_from(
+		menu_id,
+		route,
+		route_index,
+		ready_inventory
+	):
 		return false
 
-	ready_inventory["rice"] = int(ready_inventory["rice"]) - 1
-	carried_item["step"] = PREP_READY_TO_COOK
+	ready_inventory[material_id] = (
+		int(ready_inventory[material_id]) - 1
+	)
+	route_index += 1
+	carried_item["route_index"] = route_index
+	carried_item["step"] = _get_prep_step_for_station(
+		route[route_index]
+	)
 	state["day_runtime"]["carried_item"] = carried_item
 	state_changed.emit()
 	return true
@@ -906,9 +1011,24 @@ func try_start_active_order_craft(menu_id: String = "") -> bool:
 	var prep_step: String = String(carried_item.get("step", ""))
 	if prep_step == PREP_COOKING:
 		return true
+	if is_counter_busy_by_chef() or has_station_item():
+		return false
 	if not _is_prep_at_step(
 		carried_item,
-		PREP_READY_TO_COOK
+		PREP_READY_FOR_COUNTER
+	):
+		return false
+	var route: Array[String] = get_menu_kitchen_route(
+		String(carried_item.get("menu", ""))
+	)
+	var route_index: int = _get_carried_route_index(
+		carried_item,
+		route
+	)
+	if (
+		route_index < 0
+		or route_index >= route.size()
+		or route[route_index] != KITCHEN_STATION_COUNTER
 	):
 		return false
 
@@ -935,7 +1055,7 @@ func complete_active_order_craft(menu_id: String = "") -> bool:
 	var order: Dictionary = orders[customer_id]
 	if String(order.get("status", "")) != ORDER_PREPARING:
 		return false
-	if is_server_hired() and has_station_item():
+	if has_station_item():
 		return false
 
 	order["status"] = ORDER_READY_TO_SERVE
@@ -1118,6 +1238,23 @@ func get_customer_payment(customer_id: String) -> Dictionary:
 	return Dictionary(payments[customer_id]).duplicate(true)
 
 
+func get_waiting_payment_customer_ids() -> Array[String]:
+	_ensure_day_runtime_state()
+	var customer_ids: Array[String] = []
+	var payments: Dictionary = state["day_runtime"]["payments"]
+	for customer_id_value: Variant in payments.keys():
+		var customer_id: String = String(customer_id_value)
+		var payment_value: Variant = payments[customer_id]
+		if (
+			payment_value is Dictionary
+			and String(payment_value.get("status", ""))
+			== PAYMENT_WAITING
+		):
+			customer_ids.append(customer_id)
+	customer_ids.sort()
+	return customer_ids
+
+
 func get_mackerel_station_level() -> int:
 	return get_menu_station_level(MENU_MACKEREL)
 
@@ -1237,10 +1374,26 @@ func try_purchase_next_seat() -> bool:
 
 
 func is_server_hired() -> bool:
+	return is_employee_hired(STAFF_ROLE_SERVICE)
+
+
+func is_employee_hired(role_id: String) -> bool:
+	if role_id not in STAFF_ROLES:
+		return false
+	_ensure_employee_state()
 	var progression_value: Variant = state.get("progression", {})
 	if not progression_value is Dictionary:
 		return false
-	return bool(progression_value.get("server_hired", false))
+	var employees_value: Variant = progression_value.get(
+		"employees",
+		{}
+	)
+	if not employees_value is Dictionary:
+		return false
+	var employee_value: Variant = employees_value.get(role_id, {})
+	if not employee_value is Dictionary:
+		return false
+	return bool(employee_value.get("hired", false))
 
 
 func get_server_hire_cost() -> int:
@@ -1248,24 +1401,97 @@ func get_server_hire_cost() -> int:
 
 
 func try_hire_server() -> bool:
-	if is_server_hired() or not state.has("progression"):
+	return try_hire_employee(STAFF_ROLE_SERVICE)
+
+
+func get_employee_weekly_wage(role_id: String) -> int:
+	if role_id == STAFF_ROLE_CHEF:
+		return CHEF_WEEKLY_WAGE
+	if role_id == STAFF_ROLE_SERVICE:
+		return SERVICE_WEEKLY_WAGE
+	return 0
+
+
+func get_employee_next_wage_day(role_id: String) -> int:
+	if not is_employee_hired(role_id):
+		return 0
+	var progression: Dictionary = state["progression"]
+	var employees: Dictionary = progression["employees"]
+	var employee: Dictionary = employees[role_id]
+	return int(employee.get("next_wage_day", 0))
+
+
+func try_hire_employee(role_id: String) -> bool:
+	if (
+		role_id not in STAFF_ROLES
+		or is_employee_hired(role_id)
+		or not state.has("progression")
+	):
 		return false
 	var progression_value: Variant = state.get("progression", {})
 	if not progression_value is Dictionary:
 		return false
+	var weekly_wage: int = get_employee_weekly_wage(role_id)
 	var currency: int = int(state.get("currency", 0))
-	if not can_afford_day_growth_purchase(SERVER_HIRE_COST):
+	if not can_afford_day_growth_purchase(weekly_wage):
 		return false
 
 	var progression: Dictionary = progression_value
-	state["currency"] = currency - SERVER_HIRE_COST
-	progression["server_hired"] = true
-	progression["server_speed_level"] = maxi(
-		1,
-		int(progression.get("server_speed_level", 0))
+	var employees: Dictionary = progression["employees"]
+	var employee: Dictionary = employees[role_id]
+	state["currency"] = currency - weekly_wage
+	employee["hired"] = true
+	employee["weekly_wage"] = weekly_wage
+	employee["next_wage_day"] = (
+		int(state.get("day", 1)) + WAGE_PERIOD_DAYS
 	)
+	if role_id == STAFF_ROLE_SERVICE:
+		progression["server_hired"] = true
+		progression["server_speed_level"] = maxi(
+			1,
+			int(progression.get("server_speed_level", 0))
+		)
 	state_changed.emit()
 	return true
+
+
+func process_due_weekly_wages() -> Dictionary:
+	_ensure_employee_state()
+	var result: Dictionary = {
+		"paid": [],
+		"departed": [],
+		"total": 0,
+	}
+	var current_day: int = int(state.get("day", 1))
+	var progression: Dictionary = state["progression"]
+	var employees: Dictionary = progression["employees"]
+	for role_id: String in STAFF_ROLES:
+		var employee: Dictionary = employees[role_id]
+		if (
+			not bool(employee.get("hired", false))
+			or int(employee.get("next_wage_day", 0))
+			> current_day
+		):
+			continue
+		var weekly_wage: int = get_employee_weekly_wage(role_id)
+		var currency: int = int(state.get("currency", 0))
+		if currency >= weekly_wage:
+			state["currency"] = currency - weekly_wage
+			employee["next_wage_day"] = (
+				current_day + WAGE_PERIOD_DAYS
+			)
+			result["paid"].append(role_id)
+			result["total"] = int(result["total"]) + weekly_wage
+		else:
+			employee["hired"] = false
+			employee["next_wage_day"] = 0
+			result["departed"].append(role_id)
+	if not result["paid"].is_empty() or not result["departed"].is_empty():
+		progression["server_hired"] = bool(
+			employees[STAFF_ROLE_SERVICE].get("hired", false)
+		)
+		state_changed.emit()
+	return result
 
 
 func has_station_item() -> bool:
@@ -1430,6 +1656,203 @@ func cancel_server_plate_delivery(customer_id: String) -> bool:
 	return changed
 
 
+func get_chef_active_order() -> Dictionary:
+	_ensure_day_runtime_state()
+	var chef_order_value: Variant = state["day_runtime"].get(
+		"chef_order",
+		{}
+	)
+	if not chef_order_value is Dictionary:
+		return {}
+	return Dictionary(chef_order_value).duplicate(true)
+
+
+func try_chef_accept_waiting_order(
+	preferred_customer_id: String = ""
+) -> String:
+	_ensure_day_runtime_state()
+	if (
+		not is_employee_hired(STAFF_ROLE_CHEF)
+		or not get_chef_active_order().is_empty()
+		or has_station_item()
+	):
+		return ""
+	var waiting_orders: Array[Dictionary] = get_waiting_orders()
+	if waiting_orders.is_empty():
+		return ""
+	var order_summary: Dictionary = waiting_orders[0]
+	if not preferred_customer_id.is_empty():
+		var found_preferred: bool = false
+		for waiting_order: Dictionary in waiting_orders:
+			if (
+				String(waiting_order.get("customer_id", ""))
+				== preferred_customer_id
+			):
+				order_summary = waiting_order
+				found_preferred = true
+				break
+		if not found_preferred:
+			return ""
+	var customer_id: String = String(
+		order_summary.get("customer_id", "")
+	)
+	var day_runtime: Dictionary = state["day_runtime"]
+	var orders: Dictionary = day_runtime["orders"]
+	var customers: Dictionary = day_runtime["customers"]
+	if (
+		not orders.has(customer_id)
+		or not customers.has(customer_id)
+	):
+		return ""
+	var order: Dictionary = orders[customer_id]
+	var customer: Dictionary = customers[customer_id]
+	var menu_id: String = String(order.get("menu", ""))
+	var route: Array[String] = get_menu_kitchen_route(menu_id)
+	if (
+		route.is_empty()
+		or String(order.get("status", "")) != ORDER_WAITING
+		or String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_ORDER
+	):
+		return ""
+	order["status"] = ORDER_PREPARING
+	order["prepared_by"] = STAFF_ROLE_CHEF
+	customer["state"] = CUSTOMER_WAITING_FOR_FOOD
+	day_runtime["chef_order"] = {
+		"customer_id": customer_id,
+		"menu": menu_id,
+		"route_index": 0,
+	}
+	state_changed.emit()
+	return customer_id
+
+
+func get_chef_next_station_id() -> String:
+	var chef_order: Dictionary = get_chef_active_order()
+	if chef_order.is_empty():
+		return ""
+	var route: Array[String] = get_menu_kitchen_route(
+		String(chef_order.get("menu", ""))
+	)
+	var route_index: int = int(
+		chef_order.get("route_index", -1)
+	)
+	if route_index < 0 or route_index >= route.size():
+		return ""
+	return route[route_index]
+
+
+func is_counter_busy_by_chef() -> bool:
+	var chef_order: Dictionary = get_chef_active_order()
+	return bool(chef_order.get("counter_working", false))
+
+
+func try_chef_start_counter_work() -> bool:
+	_ensure_day_runtime_state()
+	var chef_order: Dictionary = get_chef_active_order()
+	var player_item: Dictionary = get_carried_item()
+	if (
+		chef_order.is_empty()
+		or get_chef_next_station_id()
+		!= KITCHEN_STATION_COUNTER
+		or has_station_item()
+		or String(player_item.get("step", "")) == PREP_COOKING
+	):
+		return false
+	if bool(chef_order.get("counter_working", false)):
+		return true
+	chef_order["counter_working"] = true
+	state["day_runtime"]["chef_order"] = chef_order
+	state_changed.emit()
+	return true
+
+
+func try_chef_process_station(station_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var chef_order: Dictionary = get_chef_active_order()
+	if (
+		chef_order.is_empty()
+		or get_chef_next_station_id() != station_id
+		or station_id == KITCHEN_STATION_COUNTER
+	):
+		return false
+	var menu_id: String = String(chef_order.get("menu", ""))
+	var material_id: String = _get_menu_station_material(
+		menu_id,
+		station_id
+	)
+	var ready_inventory: Dictionary = _get_ready_inventory()
+	if (
+		material_id.is_empty()
+		or int(ready_inventory.get(material_id, 0)) < 1
+	):
+		return false
+	ready_inventory[material_id] = (
+		int(ready_inventory[material_id]) - 1
+	)
+	chef_order["route_index"] = (
+		int(chef_order.get("route_index", 0)) + 1
+	)
+	state["day_runtime"]["chef_order"] = chef_order
+	state_changed.emit()
+	return true
+
+
+func complete_chef_order_at_counter() -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var chef_order: Dictionary = get_chef_active_order()
+	if (
+		chef_order.is_empty()
+		or get_chef_next_station_id()
+		!= KITCHEN_STATION_COUNTER
+		or not bool(chef_order.get("counter_working", false))
+		or not day_runtime["station_item"].is_empty()
+	):
+		return false
+	var customer_id: String = String(
+		chef_order.get("customer_id", "")
+	)
+	var menu_id: String = String(chef_order.get("menu", ""))
+	var orders: Dictionary = day_runtime["orders"]
+	if not orders.has(customer_id):
+		return false
+	var order: Dictionary = orders[customer_id]
+	if String(order.get("status", "")) != ORDER_PREPARING:
+		return false
+	order["status"] = ORDER_READY_TO_SERVE
+	day_runtime["station_item"] = {
+		"kind": CARRIED_KIND_PLATE,
+		"menu": menu_id,
+		"count": 1,
+		"customer_id": customer_id,
+		"reserved_by": "",
+	}
+	day_runtime["chef_order"] = {}
+	state_changed.emit()
+	return true
+
+
+func try_player_collect_counter_plate() -> bool:
+	_ensure_day_runtime_state()
+	if is_player_carrying_item():
+		return false
+	var day_runtime: Dictionary = state["day_runtime"]
+	var station_item: Dictionary = day_runtime["station_item"]
+	if (
+		station_item.is_empty()
+		or not String(
+			station_item.get("reserved_by", "")
+		).is_empty()
+	):
+		return false
+	station_item.erase("reserved_by")
+	day_runtime["carried_item"] = station_item
+	day_runtime["station_item"] = {}
+	state_changed.emit()
+	return true
+
+
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
 	var required_keys: Array[String] = [
 		"save_version",
@@ -1505,6 +1928,7 @@ func _is_day_service_drained() -> bool:
 		and day_runtime["payments"].is_empty()
 		and day_runtime["station_item"].is_empty()
 		and day_runtime["server_carried_item"].is_empty()
+		and day_runtime["chef_order"].is_empty()
 		and not is_player_carrying_item()
 	)
 
@@ -1689,6 +2113,75 @@ func _create_default_day_stats() -> Dictionary:
 	}
 
 
+func _create_employee_state(role_id: String) -> Dictionary:
+	return {
+		"hired": false,
+		"weekly_wage": get_employee_weekly_wage(role_id),
+		"next_wage_day": 0,
+	}
+
+
+func _ensure_employee_state() -> bool:
+	var changed: bool = false
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		progression_value = {}
+		state["progression"] = progression_value
+		changed = true
+	var progression: Dictionary = progression_value
+	var employees_value: Variant = progression.get("employees", {})
+	if not employees_value is Dictionary:
+		employees_value = {}
+		changed = true
+	var employees: Dictionary = employees_value
+	for role_id: String in STAFF_ROLES:
+		var employee_value: Variant = employees.get(role_id, {})
+		if not employee_value is Dictionary:
+			employee_value = {}
+			changed = true
+		var employee: Dictionary = employee_value
+		var legacy_hired: bool = (
+			role_id == STAFF_ROLE_SERVICE
+			and bool(progression.get("server_hired", false))
+		)
+		var hired: bool = bool(
+			employee.get("hired", legacy_hired)
+		) or legacy_hired
+		var weekly_wage: int = get_employee_weekly_wage(role_id)
+		var next_wage_day: int = maxi(
+			0,
+			int(
+				employee.get(
+					"next_wage_day",
+					int(state.get("day", 1)) + WAGE_PERIOD_DAYS
+					if hired
+					else 0
+				)
+			)
+		)
+		var normalized_employee: Dictionary = {
+			"hired": hired,
+			"weekly_wage": weekly_wage,
+			"next_wage_day": next_wage_day,
+		}
+		if employee != normalized_employee:
+			changed = true
+		employees[role_id] = normalized_employee
+	if (
+		not progression.has("employees")
+		or progression["employees"] != employees
+	):
+		progression["employees"] = employees
+		changed = true
+	var service_hired: bool = bool(
+		employees[STAFF_ROLE_SERVICE].get("hired", false)
+	)
+	if bool(progression.get("server_hired", false)) != service_hired:
+		progression["server_hired"] = service_hired
+		changed = true
+	return changed
+
+
 func _create_default_day_runtime() -> Dictionary:
 	return {
 		"next_customer_id": 1,
@@ -1699,6 +2192,7 @@ func _create_default_day_runtime() -> Dictionary:
 		"payments": {},
 		"station_item": {},
 		"server_carried_item": {},
+		"chef_order": {},
 		"accepting_customers": true,
 		"carried_item": {
 			"kind": "",
@@ -1815,6 +2309,7 @@ func _ensure_day_runtime_state() -> bool:
 		"payments",
 		"station_item",
 		"server_carried_item",
+		"chef_order",
 	]:
 		var dictionary_value: Variant = day_runtime.get(
 			dictionary_key,
@@ -1972,28 +2467,80 @@ func _is_prep_at_step(
 	)
 
 
-func _try_collect_topping_for_order(
+func _get_carried_route_index(
+	carried_item: Dictionary,
+	route: Array[String]
+) -> int:
+	var route_index_value: Variant = carried_item.get(
+		"route_index",
+		null
+	)
+	if (
+		route_index_value != null
+		and _is_integer_number(route_index_value)
+	):
+		return int(route_index_value)
+	var prep_step: String = String(carried_item.get("step", ""))
+	var expected_station: String = ""
+	if prep_step == PREP_NEED_FISH:
+		expected_station = KITCHEN_STATION_FISH
+	elif prep_step == PREP_NEED_OTHER:
+		expected_station = KITCHEN_STATION_OTHER
+	elif prep_step == PREP_NEED_RICE:
+		expected_station = KITCHEN_STATION_RICE
+	elif prep_step in [PREP_READY_FOR_COUNTER, PREP_COOKING]:
+		expected_station = KITCHEN_STATION_COUNTER
+	return route.find(expected_station)
+
+
+func _get_prep_step_for_station(station_id: String) -> String:
+	if station_id == KITCHEN_STATION_FISH:
+		return PREP_NEED_FISH
+	if station_id == KITCHEN_STATION_OTHER:
+		return PREP_NEED_OTHER
+	if station_id == KITCHEN_STATION_RICE:
+		return PREP_NEED_RICE
+	if station_id == KITCHEN_STATION_COUNTER:
+		return PREP_READY_FOR_COUNTER
+	return ""
+
+
+func _get_menu_station_material(
 	menu_id: String,
-	expected_step: String
+	station_id: String
+) -> String:
+	if station_id == KITCHEN_STATION_RICE:
+		return "rice"
+	if station_id == KITCHEN_STATION_FISH:
+		return menu_id if menu_id == MENU_MACKEREL else ""
+	if station_id == KITCHEN_STATION_OTHER:
+		return menu_id if menu_id == MENU_EGG else ""
+	return ""
+
+
+func _has_route_materials_from(
+	menu_id: String,
+	route: Array[String],
+	start_index: int,
+	ready_inventory: Dictionary
 ) -> bool:
-	var carried_item: Dictionary = get_carried_item()
-	if (
-		String(carried_item.get("menu", "")) != menu_id
-		or not _is_prep_at_step(carried_item, expected_step)
-	):
-		return false
-
-	var ready_inventory: Dictionary = _get_ready_inventory()
-	if (
-		int(ready_inventory.get(menu_id, 0)) < 1
-		or int(ready_inventory.get("rice", 0)) < 1
-	):
-		return false
-
-	ready_inventory[menu_id] = int(ready_inventory[menu_id]) - 1
-	carried_item["step"] = PREP_NEED_RICE
-	state["day_runtime"]["carried_item"] = carried_item
-	state_changed.emit()
+	var required_materials: Dictionary = {}
+	for route_index: int in range(start_index, route.size()):
+		var material_id: String = _get_menu_station_material(
+			menu_id,
+			route[route_index]
+		)
+		if material_id.is_empty():
+			continue
+		required_materials[material_id] = (
+			int(required_materials.get(material_id, 0)) + 1
+		)
+	for material_id: String in required_materials.keys():
+		if (
+			int(ready_inventory.get(material_id, 0))
+			< int(required_materials[material_id])
+		):
+			return false
 	return true
 
 
@@ -2114,8 +2661,7 @@ func choose_menu_for_customer(customer_id: String) -> String:
 		MENU_MACKEREL
 	)
 	var can_order_egg: bool = (
-		int(state.get("day", 1)) >= 3
-		and is_menu_unlocked(MENU_EGG)
+		is_menu_unlocked(MENU_EGG)
 		and _has_unreserved_ingredients(MENU_EGG)
 	)
 	if can_order_egg and _customer_prefers_egg(customer_id):
@@ -2158,6 +2704,30 @@ func _has_unreserved_ingredients(menu_id: String) -> bool:
 				topping_reserved += 1
 		elif carried_step == PREP_NEED_RICE:
 			rice_reserved += 1
+	var chef_order: Dictionary = get_chef_active_order()
+	if not chef_order.is_empty():
+		var chef_menu: String = String(
+			chef_order.get("menu", "")
+		)
+		var chef_route: Array[String] = get_menu_kitchen_route(
+			chef_menu
+		)
+		var chef_route_index: int = int(
+			chef_order.get("route_index", 0)
+		)
+		for route_index: int in range(
+			chef_route_index,
+			chef_route.size()
+		):
+			var station_id: String = chef_route[route_index]
+			if station_id == KITCHEN_STATION_RICE:
+				rice_reserved += 1
+			elif (
+				station_id
+				in [KITCHEN_STATION_FISH, KITCHEN_STATION_OTHER]
+				and chef_menu == menu_id
+			):
+				topping_reserved += 1
 	return (
 		int(ready_inventory.get(menu_id, 0)) > topping_reserved
 		and int(ready_inventory.get("rice", 0)) > rice_reserved

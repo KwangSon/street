@@ -1,5 +1,5 @@
 extends "res://srcs/day/day_interactable.gd"
-class_name MackerelStation
+class_name CookingCounter
 
 enum StationState {
 	IDLE,
@@ -22,6 +22,7 @@ var use_game_manager_tuning: bool = true
 var facility_size: Vector2 = Vector2(180.0, 96.0)
 var base_color: Color = Color("7197ad")
 var menu_id: String = GameManager.MENU_MACKEREL
+var _active_menu_id: String = ""
 
 var _station_state: StationState = StationState.IDLE
 var _session_mode: SessionMode = SessionMode.NONE
@@ -80,13 +81,15 @@ func is_player_in_range(
 	var prep_step: String = String(
 		carried_item.get("step", "")
 	)
-	if (
-		String(carried_item.get("menu", "")) != menu_id
-		or prep_step not in [
-			GameManager.PREP_READY_TO_COOK,
-			GameManager.PREP_COOKING,
-		]
-	):
+	var can_work: bool = prep_step in [
+		GameManager.PREP_READY_TO_COOK,
+		GameManager.PREP_COOKING,
+	]
+	var can_collect: bool = (
+		GameManager.has_station_item()
+		and not GameManager.is_player_carrying_item()
+	)
+	if not can_work and not can_collect:
 		return false
 	var half_size: Vector2 = facility_size * 0.5
 	var local_offset: Vector2 = player_position - global_position
@@ -114,7 +117,9 @@ func get_interaction_distance_squared(
 
 func interaction_entered(player: DayPlayer) -> void:
 	_player_active = true
-	if _try_start_craft():
+	if GameManager.try_player_collect_counter_plate():
+		_session_mode = SessionMode.NONE
+	elif _try_start_craft():
 		_session_mode = SessionMode.WORK
 	else:
 		_session_mode = SessionMode.NONE
@@ -138,10 +143,13 @@ func interaction_tick(player: DayPlayer, delta: float) -> void:
 		_ingredients_reserved
 		and _craft_progress >= safe_duration
 	):
-		_craft_progress = 0.0
-		_ingredients_reserved = false
-		_session_mode = SessionMode.NONE
-		GameManager.complete_active_order_craft(menu_id)
+		if GameManager.complete_active_order_craft(
+			_active_menu_id
+		):
+			_craft_progress = 0.0
+			_ingredients_reserved = false
+			_session_mode = SessionMode.NONE
+			_active_menu_id = ""
 	player.set_carried_item(GameManager.get_carried_item())
 	_refresh_visual()
 
@@ -160,8 +168,17 @@ func set_interaction_highlighted(highlighted: bool) -> void:
 func _try_start_craft() -> bool:
 	if _ingredients_reserved:
 		return true
-	if not GameManager.try_start_active_order_craft(menu_id):
+	var carried_item: Dictionary = GameManager.get_carried_item()
+	var carried_menu: String = String(
+		carried_item.get("menu", "")
+	)
+	if not GameManager.try_start_active_order_craft(carried_menu):
 		return false
+	_active_menu_id = carried_menu
+	if use_game_manager_tuning:
+		craft_duration = GameManager.get_menu_craft_duration(
+			_active_menu_id
+		)
 	_ingredients_reserved = true
 	_refresh_visual()
 	return true
@@ -171,16 +188,12 @@ func _resolve_station_state() -> StationState:
 	if _ingredients_reserved:
 		return StationState.CRAFTING
 	var station_item: Dictionary = GameManager.get_station_item()
-	if (
-		not station_item.is_empty()
-		and String(station_item.get("menu", "")) == menu_id
-	):
+	if not station_item.is_empty():
 		return StationState.READY
 	var carried_item: Dictionary = GameManager.get_carried_item()
 	if (
 		String(carried_item.get("kind", ""))
 		== GameManager.CARRIED_KIND_PLATE
-		and String(carried_item.get("menu", "")) == menu_id
 	):
 		return StationState.READY
 	return StationState.IDLE
@@ -192,10 +205,7 @@ func _refresh_visual() -> void:
 		return
 	if use_game_manager_tuning and not _ingredients_reserved:
 		craft_duration = GameManager.get_menu_craft_duration(menu_id)
-	_title_label.text = "%s 조리대 Lv.%d" % [
-		GameManager.get_menu_display_name(menu_id),
-		GameManager.get_menu_station_level(menu_id),
-	]
+	_title_label.text = "조리대"
 
 	var safe_duration: float = maxf(craft_duration, 0.001)
 	_progress_bar.value = clampf(
@@ -217,13 +227,13 @@ func _refresh_visual() -> void:
 				GameManager.PREP_NEED_MACKEREL,
 				GameManager.PREP_NEED_EGG,
 			]:
-				_status_label.text = "%s 먼저" % (
-					GameManager.get_menu_display_name(menu_id)
-				)
+				_status_label.text = "재료 스테이션 먼저"
 			elif prep_step == GameManager.PREP_NEED_RICE:
 				_status_label.text = "밥 먼저"
 			elif prep_step == GameManager.PREP_READY_TO_COOK:
 				_status_label.text = "제작 준비"
+			elif GameManager.has_station_item():
+				_status_label.text = "완성 음식 수령"
 			else:
 				_status_label.text = "주문 필요"
 			_status_label.add_theme_color_override(
@@ -242,9 +252,9 @@ func _refresh_visual() -> void:
 			)
 		StationState.READY:
 			_status_label.text = (
-				"점원 수령 대기"
-				if GameManager.has_station_item()
-				else "서빙하세요"
+				"접객 수령 대기"
+				if GameManager.is_server_hired()
+				else "완성 음식 수령"
 			)
 			_status_label.add_theme_color_override(
 				"font_color",
