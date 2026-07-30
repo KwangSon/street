@@ -31,6 +31,8 @@ const PAYMENT_COLLECTED: String = "collected"
 
 const MACKEREL_PRICE: int = 6
 const MACKEREL_STATION_P0_MAX_LEVEL: int = 2
+const SECOND_SEAT_COST: int = 24
+const P0_MAX_SEATS: int = 2
 const MACKEREL_STATION_LEVELS: Dictionary = {
 	1: {
 		"craft_duration": 3.2,
@@ -204,7 +206,10 @@ func try_assign_customer_to_seat(
 	_ensure_day_runtime_state()
 	var day_runtime: Dictionary = state["day_runtime"]
 	var customers: Dictionary = day_runtime["customers"]
-	if not customers.has(customer_id) or seat_id.is_empty():
+	if (
+		not customers.has(customer_id)
+		or not _is_seat_unlocked(seat_id)
+	):
 		return false
 
 	var seat_assignments: Dictionary = (
@@ -671,6 +676,42 @@ func try_purchase_mackerel_station_upgrade() -> bool:
 	return true
 
 
+func get_unlocked_seat_count() -> int:
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return 1
+	return clampi(
+		int(progression_value.get("seats", 1)),
+		1,
+		P0_MAX_SEATS
+	)
+
+
+func get_second_seat_cost() -> int:
+	if get_unlocked_seat_count() >= P0_MAX_SEATS:
+		return 0
+	return SECOND_SEAT_COST
+
+
+func try_purchase_second_seat() -> bool:
+	if get_unlocked_seat_count() >= P0_MAX_SEATS:
+		return false
+	if not state.has("progression"):
+		return false
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return false
+	var currency: int = int(state.get("currency", 0))
+	if currency < SECOND_SEAT_COST:
+		return false
+
+	var progression: Dictionary = progression_value
+	state["currency"] = currency - SECOND_SEAT_COST
+	progression["seats"] = P0_MAX_SEATS
+	state_changed.emit()
+	return true
+
+
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
 	var required_keys: Array[String] = [
 		"save_version",
@@ -709,9 +750,21 @@ func _is_integer_number(value: Variant) -> bool:
 		return true
 	if value_type != TYPE_FLOAT:
 		return false
-
 	var float_value: float = float(value)
 	return is_finite(float_value) and float_value == floor(float_value)
+
+
+func _is_seat_unlocked(seat_id: String) -> bool:
+	if not seat_id.begins_with("seat_"):
+		return false
+	var seat_number_text: String = seat_id.trim_prefix("seat_")
+	if not seat_number_text.is_valid_int():
+		return false
+	var seat_number: int = int(seat_number_text)
+	return (
+		seat_number >= 1
+		and seat_number <= get_unlocked_seat_count()
+	)
 
 
 func _create_default_day_runtime() -> Dictionary:

@@ -60,6 +60,32 @@ func get_payment(customer_id: String) -> DayPayment:
 	return _payments.get(customer_id) as DayPayment
 
 
+func add_seat(seat_id: String, seat_target: Vector2) -> bool:
+	if seat_id.is_empty() or _seat_targets.has(seat_id):
+		return false
+	_seat_targets[seat_id] = seat_target
+	while (
+		_has_available_seat()
+		and not GameManager.get_customer_queue().is_empty()
+	):
+		var queue_size_before: int = (
+			GameManager.get_customer_queue().size()
+		)
+		_promote_next_customer()
+		if (
+			GameManager.get_customer_queue().size()
+			>= queue_size_before
+		):
+			break
+	if _has_available_seat():
+		_spawn_customer()
+	return true
+
+
+func has_seat(seat_id: String) -> bool:
+	return _seat_targets.has(seat_id)
+
+
 func _spawn_customer() -> void:
 	if (
 		not _has_available_seat()

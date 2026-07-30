@@ -24,6 +24,9 @@ const DayPreparationSourceScript: Script = preload(
 const DayUpgradePadScript: Script = preload(
 	"res://srcs/day/day_upgrade_pad.gd"
 )
+const DaySeatPurchasePadScript: Script = preload(
+	"res://srcs/day/day_seat_purchase_pad.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -39,6 +42,9 @@ const MAP_COLOR: Color = Color("b9b7ad")
 const GRID_COLOR: Color = Color("aaa89f")
 const HUD_COLOR: Color = Color("35291f")
 const HUD_TEXT_COLOR: Color = Color("fff4d6")
+const SEAT_2_ID: String = "seat_2"
+const SEAT_2_POSITION: Vector2 = Vector2(900.0, 920.0)
+const SEAT_2_TARGET: Vector2 = Vector2(900.0, 830.0)
 
 const FACILITIES: Array[Dictionary] = [
 	{
@@ -92,7 +98,7 @@ const FACILITIES: Array[Dictionary] = [
 	{
 		"name": "Seat2",
 		"label": "좌석 2",
-		"position": Vector2(900.0, 920.0),
+		"position": SEAT_2_POSITION,
 		"size": Vector2(120.0, 100.0),
 		"color": Color("8d6b51"),
 		"collision": true,
@@ -117,6 +123,7 @@ var _customer_manager: DayCustomerManager
 var _ingredient_box: DayPreparationSource
 var _rice_pot: DayPreparationSource
 var _mackerel_upgrade_pad: DayUpgradePad
+var _seat_purchase_pad: DaySeatPurchasePad
 var _inventory_label: Label
 var _currency_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
@@ -218,6 +225,10 @@ func get_mackerel_upgrade_pad() -> DayUpgradePad:
 	return _mackerel_upgrade_pad
 
 
+func get_seat_purchase_pad() -> DaySeatPurchasePad:
+	return _seat_purchase_pad
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -254,12 +265,19 @@ func _build_world() -> void:
 	_add_map_background()
 	_add_map_boundaries()
 	for facility: Dictionary in FACILITIES:
+		if not _should_build_facility(String(facility["name"])):
+			continue
 		_add_facility(facility)
 
 	_mackerel_upgrade_pad = DayUpgradePadScript.new()
 	_mackerel_upgrade_pad.name = "MackerelUpgradePad"
 	_mackerel_upgrade_pad.position = Vector2(540.0, 465.0)
 	_world.add_child(_mackerel_upgrade_pad)
+
+	_seat_purchase_pad = DaySeatPurchasePadScript.new()
+	_seat_purchase_pad.name = "Seat2PurchasePad"
+	_seat_purchase_pad.position = Vector2(620.0, 580.0)
+	_world.add_child(_seat_purchase_pad)
 
 	_player = DayPlayerScript.new()
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
@@ -276,15 +294,16 @@ func _build_world() -> void:
 	_interaction_controller.register_interactable(
 		_mackerel_upgrade_pad
 	)
+	_interaction_controller.register_interactable(
+		_seat_purchase_pad
+	)
 	_world.add_child(_interaction_controller)
 
 	_customer_manager = DayCustomerManagerScript.new()
 	_customer_manager.name = "CustomerManager"
 	_customer_manager.configure(
 		Vector2(120.0, 860.0),
-		{
-			"seat_1": Vector2(500.0, 750.0),
-		},
+		_get_unlocked_seat_targets(),
 		[
 			Vector2(190.0, 860.0),
 			Vector2(260.0, 860.0),
@@ -452,7 +471,12 @@ func _add_facility(facility: Dictionary) -> void:
 func _get_navigation_obstacle_rects() -> Array[Rect2]:
 	var obstacle_rects: Array[Rect2] = []
 	for facility: Dictionary in FACILITIES:
-		if not bool(facility["collision"]):
+		if (
+			not bool(facility["collision"])
+			or not _should_build_facility(
+				String(facility["name"])
+			)
+		):
 			continue
 		var facility_size: Vector2 = facility["size"]
 		obstacle_rects.append(
@@ -643,6 +667,7 @@ func _on_viewport_size_changed() -> void:
 
 
 func _on_game_state_changed() -> void:
+	_install_second_seat_if_unlocked()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
 	if _player != null:
@@ -653,6 +678,46 @@ func _on_customer_interactable_created(
 	interactable: DayInteractable
 ) -> void:
 	_interaction_controller.register_interactable(interactable)
+
+
+func _install_second_seat_if_unlocked() -> void:
+	if (
+		_world == null
+		or GameManager.get_unlocked_seat_count() < 2
+		or _world.get_node_or_null("Seat2") != null
+	):
+		return
+	for facility: Dictionary in FACILITIES:
+		if String(facility["name"]) != "Seat2":
+			continue
+		_add_facility(facility)
+		break
+	if _navigation != null:
+		_navigation.configure(
+			MAP_SIZE,
+			DayPlayer.COLLISION_RADIUS,
+			_get_navigation_obstacle_rects()
+		)
+	if _customer_manager != null:
+		_customer_manager.add_seat(
+			SEAT_2_ID,
+			SEAT_2_TARGET
+		)
+
+
+func _get_unlocked_seat_targets() -> Dictionary:
+	var seat_targets: Dictionary = {
+		"seat_1": Vector2(500.0, 750.0),
+	}
+	if GameManager.get_unlocked_seat_count() >= 2:
+		seat_targets[SEAT_2_ID] = SEAT_2_TARGET
+	return seat_targets
+
+
+func _should_build_facility(facility_name: String) -> bool:
+	if facility_name == "Seat2":
+		return GameManager.get_unlocked_seat_count() >= 2
+	return true
 
 
 func _refresh_inventory_hud() -> void:

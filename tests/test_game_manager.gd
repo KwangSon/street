@@ -191,6 +191,41 @@ func test_upgrade_rejects_missing_progression_data() -> void:
 	assert_eq(GameManager.state["currency"], 12)
 
 
+func test_second_seat_costs_twenty_four_and_unlocks_assignment() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	GameManager.state["currency"] = 23
+
+	assert_false(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_2"
+		)
+	)
+	assert_false(GameManager.try_purchase_second_seat())
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_eq(GameManager.state["currency"], 23)
+
+	GameManager.state["currency"] = 24
+	assert_true(GameManager.try_purchase_second_seat())
+	assert_eq(GameManager.get_unlocked_seat_count(), 2)
+	assert_eq(GameManager.get_second_seat_cost(), 0)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_2"
+		)
+	)
+	assert_false(GameManager.try_purchase_second_seat())
+	assert_false(
+		GameManager.try_assign_customer_to_seat(
+			GameManager.create_day_customer(),
+			"seat_3"
+		)
+	)
+
+
 func test_only_matching_customer_receives_finished_plate() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var customer_id: String = _create_ready_plate_order()

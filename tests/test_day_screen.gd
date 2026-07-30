@@ -36,6 +36,8 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_node("World/CustomerManager"))
 	assert_not_null(screen.get_mackerel_station())
 	assert_not_null(screen.get_mackerel_upgrade_pad())
+	assert_not_null(screen.get_seat_purchase_pad())
+	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
 
@@ -79,6 +81,98 @@ func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
 		pad.get_node("StatusLabel").text,
 		"판매 7문"
 	)
+
+
+func test_seat_pad_blocks_purchase_when_currency_is_insufficient() -> void:
+	GameManager.state["currency"] = 23
+	var screen: DayScreen = await _create_screen()
+	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
+	screen.get_player().position = pad.position
+
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_eq(GameManager.state["currency"], 23)
+	assert_null(screen.get_node_or_null("World/Seat2"))
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"24문 필요"
+	)
+
+
+func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
+	GameManager.state["currency"] = 24
+	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	customer_manager.spawn_interval = 0.01
+	customer_manager._spawn_time_remaining = 0.01
+	await wait_physics_frames(20)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_2",
+			"customer_3",
+			"customer_4",
+		]
+	)
+
+	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
+	screen.get_player().position = pad.position
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_unlocked_seat_count(), 2)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_not_null(screen.get_node_or_null("World/Seat2"))
+	assert_true(customer_manager.has_seat("seat_2"))
+	assert_eq(
+		GameManager.state["day_runtime"]["seat_assignments"][
+			"seat_2"
+		],
+		"customer_2"
+	)
+	assert_eq(
+		customer_manager.get_customer(
+			"customer_2"
+		).get_seat_target(),
+		DayScreen.SEAT_2_TARGET
+	)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_3",
+			"customer_4",
+			"customer_5",
+		]
+	)
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"동시 손님 2명"
+	)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			DayScreen.SEAT_2_POSITION
+		)
+	)
+	var seat_rect: Rect2 = Rect2(
+		DayScreen.SEAT_2_POSITION - Vector2(60.0, 50.0),
+		Vector2(120.0, 100.0)
+	).grow(DayPlayer.COLLISION_RADIUS)
+	assert_false(
+		seat_rect.has_point(
+			screen.get_player().get_destination()
+		)
+	)
+
+
+func test_loaded_second_seat_exists_before_customer_spawn() -> void:
+	GameManager.state["progression"]["seats"] = 2
+	var screen: DayScreen = await _create_screen()
+
+	assert_not_null(screen.get_node_or_null("World/Seat2"))
+	assert_true(screen.get_customer_manager().has_seat("seat_2"))
 
 
 func test_initial_customer_reserves_seat_and_shows_order() -> void:
