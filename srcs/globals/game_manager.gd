@@ -33,6 +33,7 @@ const MACKEREL_PRICE: int = 6
 const MACKEREL_STATION_P0_MAX_LEVEL: int = 2
 const SECOND_SEAT_COST: int = 24
 const P0_MAX_SEATS: int = 2
+const SERVER_HIRE_COST: int = 45
 const MACKEREL_STATION_LEVELS: Dictionary = {
 	1: {
 		"craft_duration": 3.2,
@@ -343,7 +344,7 @@ func get_waiting_orders() -> Array[Dictionary]:
 
 func try_accept_waiting_order(customer_id: String) -> bool:
 	_ensure_day_runtime_state()
-	if is_player_carrying_item():
+	if is_player_carrying_item() or has_station_item():
 		return false
 
 	var day_runtime: Dictionary = state["day_runtime"]
@@ -451,14 +452,26 @@ func complete_active_order_craft() -> bool:
 	var order: Dictionary = orders[customer_id]
 	if String(order.get("status", "")) != ORDER_PREPARING:
 		return false
+	if is_server_hired() and has_station_item():
+		return false
 
 	order["status"] = ORDER_READY_TO_SERVE
-	state["day_runtime"]["carried_item"] = {
+	var completed_plate: Dictionary = {
 		"kind": CARRIED_KIND_PLATE,
 		"menu": MENU_MACKEREL,
 		"count": 1,
 		"customer_id": customer_id,
 	}
+	if is_server_hired():
+		completed_plate["reserved_by"] = ""
+		state["day_runtime"]["station_item"] = completed_plate
+		state["day_runtime"]["carried_item"] = {
+			"kind": "",
+			"menu": "",
+			"count": 0,
+		}
+	else:
+		state["day_runtime"]["carried_item"] = completed_plate
 	state_changed.emit()
 	return true
 
@@ -712,6 +725,200 @@ func try_purchase_second_seat() -> bool:
 	return true
 
 
+func is_server_hired() -> bool:
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return false
+	return bool(progression_value.get("server_hired", false))
+
+
+func get_server_hire_cost() -> int:
+	return 0 if is_server_hired() else SERVER_HIRE_COST
+
+
+func try_hire_server() -> bool:
+	if is_server_hired() or not state.has("progression"):
+		return false
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return false
+	var currency: int = int(state.get("currency", 0))
+	if currency < SERVER_HIRE_COST:
+		return false
+
+	var progression: Dictionary = progression_value
+	state["currency"] = currency - SERVER_HIRE_COST
+	progression["server_hired"] = true
+	progression["server_speed_level"] = maxi(
+		1,
+		int(progression.get("server_speed_level", 0))
+	)
+	state_changed.emit()
+	return true
+
+
+func has_station_item() -> bool:
+	return not get_station_item().is_empty()
+
+
+func get_station_item() -> Dictionary:
+	_ensure_day_runtime_state()
+	var station_item_value: Variant = state["day_runtime"].get(
+		"station_item",
+		{}
+	)
+	if not station_item_value is Dictionary:
+		return {}
+	return Dictionary(station_item_value).duplicate(true)
+
+
+func get_server_carried_item() -> Dictionary:
+	_ensure_day_runtime_state()
+	var carried_value: Variant = state["day_runtime"].get(
+		"server_carried_item",
+		{}
+	)
+	if not carried_value is Dictionary:
+		return {}
+	return Dictionary(carried_value).duplicate(true)
+
+
+func try_reserve_ready_plate_for_server() -> String:
+	_ensure_day_runtime_state()
+	if not is_server_hired():
+		return ""
+	var day_runtime: Dictionary = state["day_runtime"]
+	var server_item: Dictionary = day_runtime["server_carried_item"]
+	var station_item: Dictionary = day_runtime["station_item"]
+	if not server_item.is_empty() or station_item.is_empty():
+		return ""
+	if not String(station_item.get("reserved_by", "")).is_empty():
+		return ""
+
+	var customer_id: String = String(
+		station_item.get("customer_id", "")
+	)
+	var orders: Dictionary = day_runtime["orders"]
+	var customers: Dictionary = day_runtime["customers"]
+	if (
+		customer_id.is_empty()
+		or not orders.has(customer_id)
+		or not customers.has(customer_id)
+	):
+		return ""
+	var order: Dictionary = orders[customer_id]
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(order.get("status", ""))
+		!= ORDER_READY_TO_SERVE
+		or String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_FOOD
+		or String(station_item.get("menu", ""))
+		!= String(order.get("menu", ""))
+	):
+		return ""
+
+	station_item["reserved_by"] = "server"
+	order["reserved_by"] = "server"
+	state_changed.emit()
+	return customer_id
+
+
+func try_server_collect_reserved_plate(
+	customer_id: String
+) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var server_item: Dictionary = day_runtime["server_carried_item"]
+	var station_item: Dictionary = day_runtime["station_item"]
+	if (
+		not server_item.is_empty()
+		or String(station_item.get("customer_id", ""))
+		!= customer_id
+		or String(station_item.get("reserved_by", ""))
+		!= "server"
+	):
+		return false
+
+	station_item.erase("reserved_by")
+	day_runtime["server_carried_item"] = station_item
+	day_runtime["station_item"] = {}
+	state_changed.emit()
+	return true
+
+
+func try_server_serve_order(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var orders: Dictionary = day_runtime["orders"]
+	var customers: Dictionary = day_runtime["customers"]
+	var server_item: Dictionary = day_runtime["server_carried_item"]
+	if (
+		not orders.has(customer_id)
+		or not customers.has(customer_id)
+	):
+		return false
+	var order: Dictionary = orders[customer_id]
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(order.get("status", ""))
+		!= ORDER_READY_TO_SERVE
+		or String(order.get("reserved_by", ""))
+		!= "server"
+		or String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_FOOD
+		or String(server_item.get("kind", ""))
+		!= CARRIED_KIND_PLATE
+		or String(server_item.get("customer_id", ""))
+		!= customer_id
+		or String(server_item.get("menu", ""))
+		!= String(order.get("menu", ""))
+	):
+		return false
+
+	order.erase("reserved_by")
+	order["status"] = ORDER_EATING
+	customer["state"] = CUSTOMER_EATING
+	day_runtime["server_carried_item"] = {}
+	state_changed.emit()
+	return true
+
+
+func cancel_server_plate_delivery(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var station_item: Dictionary = day_runtime["station_item"]
+	var server_item: Dictionary = day_runtime["server_carried_item"]
+	var changed: bool = false
+	if (
+		String(station_item.get("customer_id", ""))
+		== customer_id
+		and String(station_item.get("reserved_by", ""))
+		== "server"
+	):
+		station_item["reserved_by"] = ""
+		changed = true
+	elif (
+		String(server_item.get("customer_id", ""))
+		== customer_id
+		and station_item.is_empty()
+	):
+		server_item["reserved_by"] = ""
+		day_runtime["station_item"] = server_item
+		day_runtime["server_carried_item"] = {}
+		changed = true
+
+	var orders: Dictionary = day_runtime["orders"]
+	if orders.has(customer_id):
+		var order: Dictionary = orders[customer_id]
+		if String(order.get("reserved_by", "")) == "server":
+			order.erase("reserved_by")
+			changed = true
+	if changed:
+		state_changed.emit()
+	return changed
+
+
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
 	var required_keys: Array[String] = [
 		"save_version",
@@ -775,6 +982,8 @@ func _create_default_day_runtime() -> Dictionary:
 		"seat_assignments": {},
 		"orders": {},
 		"payments": {},
+		"station_item": {},
+		"server_carried_item": {},
 		"carried_item": {
 			"kind": "",
 			"menu": "",
@@ -879,6 +1088,8 @@ func _ensure_day_runtime_state() -> bool:
 		"seat_assignments",
 		"orders",
 		"payments",
+		"station_item",
+		"server_carried_item",
 	]:
 		var dictionary_value: Variant = day_runtime.get(
 			dictionary_key,

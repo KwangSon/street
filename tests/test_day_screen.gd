@@ -37,6 +37,8 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_mackerel_station())
 	assert_not_null(screen.get_mackerel_upgrade_pad())
 	assert_not_null(screen.get_seat_purchase_pad())
+	assert_not_null(screen.get_staff_hire_pad())
+	assert_null(screen.get_server())
 	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
@@ -173,6 +175,84 @@ func test_loaded_second_seat_exists_before_customer_spawn() -> void:
 
 	assert_not_null(screen.get_node_or_null("World/Seat2"))
 	assert_true(screen.get_customer_manager().has_seat("seat_2"))
+
+
+func test_staff_pad_blocks_hire_when_currency_is_insufficient() -> void:
+	GameManager.state["currency"] = 44
+	var screen: DayScreen = await _create_screen()
+	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
+	screen.get_player().position = pad.position
+
+	await wait_physics_frames(70)
+
+	assert_false(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 44)
+	assert_null(screen.get_server())
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"45문 필요"
+	)
+
+
+func test_staff_pad_hires_one_server_and_refreshes_hud() -> void:
+	GameManager.state["currency"] = 45
+	var screen: DayScreen = await _create_screen()
+	var pad: DayStaffHirePad = screen.get_staff_hire_pad()
+	screen.get_player().position = pad.position
+
+	await wait_physics_frames(70)
+
+	assert_true(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 0)
+	assert_not_null(screen.get_server())
+	assert_eq(
+		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
+		"0문"
+	)
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"자동 서빙"
+	)
+	assert_false(GameManager.try_hire_server())
+
+
+func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
+	GameManager.state["currency"] = 45
+	assert_true(GameManager.try_hire_server())
+	var screen: DayScreen = await _create_screen()
+	var server: DayServer = screen.get_server()
+	assert_not_null(server)
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_true(GameManager.has_station_item())
+	assert_false(GameManager.is_player_carrying_item())
+
+	var serving_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_day_customer(
+						"customer_1"
+					).get("state", "")
+				)
+				== GameManager.CUSTOMER_EATING
+			),
+		600
+	)
+
+	assert_lte(serving_frames, 600)
+	assert_false(GameManager.has_station_item())
+	assert_true(GameManager.get_server_carried_item().is_empty())
+	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
 
 
 func test_initial_customer_reserves_seat_and_shows_order() -> void:

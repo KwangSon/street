@@ -161,6 +161,8 @@ func _try_start_craft() -> bool:
 func _resolve_station_state() -> StationState:
 	if _ingredients_reserved:
 		return StationState.CRAFTING
+	if GameManager.has_station_item():
+		return StationState.READY
 	var carried_item: Dictionary = GameManager.get_carried_item()
 	if (
 		String(carried_item.get("kind", ""))
@@ -219,7 +221,11 @@ func _refresh_visual() -> void:
 				STATUS_COLOR
 			)
 		StationState.READY:
-			_status_label.text = "서빙하세요"
+			_status_label.text = (
+				"점원 수령 대기"
+				if GameManager.has_station_item()
+				else "서빙하세요"
+			)
 			_status_label.add_theme_color_override(
 				"font_color",
 				STATUS_COLOR

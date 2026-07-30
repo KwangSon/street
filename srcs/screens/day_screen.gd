@@ -27,6 +27,12 @@ const DayUpgradePadScript: Script = preload(
 const DaySeatPurchasePadScript: Script = preload(
 	"res://srcs/day/day_seat_purchase_pad.gd"
 )
+const DayStaffHirePadScript: Script = preload(
+	"res://srcs/day/day_staff_hire_pad.gd"
+)
+const DayServerScript: Script = preload(
+	"res://srcs/day/day_server.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -45,6 +51,8 @@ const HUD_TEXT_COLOR: Color = Color("fff4d6")
 const SEAT_2_ID: String = "seat_2"
 const SEAT_2_POSITION: Vector2 = Vector2(900.0, 920.0)
 const SEAT_2_TARGET: Vector2 = Vector2(900.0, 830.0)
+const STAFF_PAD_POSITION: Vector2 = Vector2(900.0, 1420.0)
+const SERVER_START_POSITION: Vector2 = Vector2(900.0, 1320.0)
 
 const FACILITIES: Array[Dictionary] = [
 	{
@@ -103,14 +111,6 @@ const FACILITIES: Array[Dictionary] = [
 		"color": Color("8d6b51"),
 		"collision": true,
 	},
-	{
-		"name": "StaffPad",
-		"label": "점원 패드",
-		"position": Vector2(900.0, 1420.0),
-		"size": Vector2(180.0, 100.0),
-		"color": Color("8a769d"),
-		"collision": true,
-	},
 ]
 
 var _world: Node2D
@@ -124,6 +124,8 @@ var _ingredient_box: DayPreparationSource
 var _rice_pot: DayPreparationSource
 var _mackerel_upgrade_pad: DayUpgradePad
 var _seat_purchase_pad: DaySeatPurchasePad
+var _staff_hire_pad: DayStaffHirePad
+var _server: DayServer
 var _inventory_label: Label
 var _currency_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
@@ -229,6 +231,14 @@ func get_seat_purchase_pad() -> DaySeatPurchasePad:
 	return _seat_purchase_pad
 
 
+func get_staff_hire_pad() -> DayStaffHirePad:
+	return _staff_hire_pad
+
+
+func get_server() -> DayServer:
+	return _server
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -279,6 +289,11 @@ func _build_world() -> void:
 	_seat_purchase_pad.position = Vector2(620.0, 580.0)
 	_world.add_child(_seat_purchase_pad)
 
+	_staff_hire_pad = DayStaffHirePadScript.new()
+	_staff_hire_pad.name = "StaffHirePad"
+	_staff_hire_pad.position = STAFF_PAD_POSITION
+	_world.add_child(_staff_hire_pad)
+
 	_player = DayPlayerScript.new()
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
 	_player.position = PLAYER_START_POSITION
@@ -296,6 +311,9 @@ func _build_world() -> void:
 	)
 	_interaction_controller.register_interactable(
 		_seat_purchase_pad
+	)
+	_interaction_controller.register_interactable(
+		_staff_hire_pad
 	)
 	_world.add_child(_interaction_controller)
 
@@ -332,6 +350,7 @@ func _build_world() -> void:
 		DayPlayer.COLLISION_RADIUS,
 		_get_navigation_obstacle_rects()
 	)
+	_install_server_if_hired()
 
 
 func _add_map_background() -> void:
@@ -668,6 +687,7 @@ func _on_viewport_size_changed() -> void:
 
 func _on_game_state_changed() -> void:
 	_install_second_seat_if_unlocked()
+	_install_server_if_hired()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
 	if _player != null:
@@ -703,6 +723,25 @@ func _install_second_seat_if_unlocked() -> void:
 			SEAT_2_ID,
 			SEAT_2_TARGET
 		)
+
+
+func _install_server_if_hired() -> void:
+	if (
+		_world == null
+		or not GameManager.is_server_hired()
+		or _server != null
+		or _navigation == null
+		or _customer_manager == null
+	):
+		return
+	_server = DayServerScript.new()
+	_server.configure(
+		SERVER_START_POSITION,
+		_mackerel_station.position,
+		_customer_manager,
+		_navigation
+	)
+	_world.add_child(_server)
 
 
 func _get_unlocked_seat_targets() -> Dictionary:

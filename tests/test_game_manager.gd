@@ -25,6 +25,10 @@ func test_default_state_starts_first_day_service() -> void:
 	assert_true(state["day_runtime"]["seat_assignments"].is_empty())
 	assert_true(state["day_runtime"]["orders"].is_empty())
 	assert_true(state["day_runtime"]["payments"].is_empty())
+	assert_true(state["day_runtime"]["station_item"].is_empty())
+	assert_true(
+		state["day_runtime"]["server_carried_item"].is_empty()
+	)
 
 
 func test_apply_loaded_state_deep_copies_and_preserves_extra_keys() -> void:
@@ -223,6 +227,89 @@ func test_second_seat_costs_twenty_four_and_unlocks_assignment() -> void:
 			GameManager.create_day_customer(),
 			"seat_3"
 		)
+	)
+
+
+func test_server_costs_forty_five_and_serves_reserved_plate() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 44
+
+	assert_false(GameManager.try_hire_server())
+	assert_false(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 44)
+
+	GameManager.state["currency"] = 45
+	assert_true(GameManager.try_hire_server())
+	assert_true(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.get_server_hire_cost(), 0)
+	assert_false(GameManager.try_hire_server())
+
+	var customer_id: String = _create_ready_plate_order()
+	assert_false(GameManager.is_player_carrying_item())
+	assert_eq(
+		GameManager.get_station_item()["customer_id"],
+		customer_id
+	)
+	assert_false(GameManager.try_serve_order(customer_id))
+
+	assert_eq(
+		GameManager.try_reserve_ready_plate_for_server(),
+		customer_id
+	)
+	assert_eq(
+		GameManager.get_station_item()["reserved_by"],
+		"server"
+	)
+	assert_true(
+		GameManager.try_reserve_ready_plate_for_server().is_empty()
+	)
+	assert_true(
+		GameManager.try_server_collect_reserved_plate(customer_id)
+	)
+	assert_true(GameManager.get_station_item().is_empty())
+	assert_eq(
+		GameManager.get_server_carried_item()["customer_id"],
+		customer_id
+	)
+	assert_false(GameManager.try_server_serve_order("customer_other"))
+	assert_true(GameManager.try_server_serve_order(customer_id))
+	assert_true(GameManager.get_server_carried_item().is_empty())
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_EATING
+	)
+
+
+func test_cancelled_server_delivery_returns_plate_to_station() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 45
+	assert_true(GameManager.try_hire_server())
+	var customer_id: String = _create_ready_plate_order()
+	assert_eq(
+		GameManager.try_reserve_ready_plate_for_server(),
+		customer_id
+	)
+	assert_true(
+		GameManager.try_server_collect_reserved_plate(customer_id)
+	)
+
+	assert_true(
+		GameManager.cancel_server_plate_delivery(customer_id)
+	)
+	assert_true(GameManager.get_server_carried_item().is_empty())
+	assert_eq(
+		GameManager.get_station_item()["customer_id"],
+		customer_id
+	)
+	assert_eq(
+		String(
+			GameManager.get_day_order(customer_id).get(
+				"reserved_by",
+				""
+			)
+		),
+		""
 	)
 
 
