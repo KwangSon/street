@@ -165,6 +165,46 @@ func test_order_mackerel_rice_station_sequence_starts_crafting() -> void:
 	)
 
 
+func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	customer.eating_duration = 0.1
+	await wait_physics_frames(2)
+
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+
+	screen.get_player().position = customer.position
+	await wait_physics_frames(2)
+
+	assert_eq(
+		GameManager.get_day_customer("customer_1")["state"],
+		GameManager.CUSTOMER_EATING
+	)
+	assert_false(GameManager.is_player_carrying_item())
+	assert_eq(
+		customer.get_node("OrderBubble/MenuLabel").text,
+		"냠냠"
+	)
+
+	await wait_physics_frames(10)
+
+	assert_eq(
+		GameManager.get_day_customer("customer_1")["state"],
+		GameManager.CUSTOMER_WAITING_FOR_PAYMENT
+	)
+	assert_eq(
+		customer.get_node("OrderBubble/MenuLabel").text,
+		"계산"
+	)
+
+
 func test_touch_tap_sets_world_destination() -> void:
 	var screen: DayScreen = await _create_screen()
 	var tap_position: Vector2 = Vector2(460.0, 640.0)

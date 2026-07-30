@@ -141,6 +141,34 @@ func test_missing_rice_does_not_consume_mackerel() -> void:
 	)
 
 
+func test_only_matching_customer_receives_finished_plate() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = _create_ready_plate_order()
+
+	assert_false(GameManager.try_serve_order("customer_other"))
+	assert_true(GameManager.try_serve_order(customer_id))
+	assert_false(GameManager.is_player_carrying_item())
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_EATING
+	)
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_EATING
+	)
+
+	assert_true(GameManager.mark_customer_finished_eating(customer_id))
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_WAITING_FOR_PAYMENT
+	)
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_WAITING_FOR_PAYMENT
+	)
+	assert_false(GameManager.mark_customer_finished_eating(customer_id))
+
+
 func test_customer_reserves_one_seat_and_creates_mackerel_order() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var first_customer_id: String = GameManager.create_day_customer()
@@ -232,3 +260,25 @@ func test_apply_loaded_state_rejects_fractional_day() -> void:
 
 	assert_false(GameManager.apply_loaded_game_state(source_state))
 	assert_true(GameManager.state.is_empty())
+
+
+func _create_ready_plate_order() -> String:
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	return customer_id

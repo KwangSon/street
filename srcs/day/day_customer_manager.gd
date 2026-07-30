@@ -53,6 +53,7 @@ func _spawn_initial_customer() -> void:
 		Vector2(_seat_targets[seat_id])
 	)
 	customer.reached_seat.connect(_on_customer_reached_seat)
+	customer.finished_eating.connect(_on_customer_finished_eating)
 	_customers[customer_id] = customer
 	add_child(customer)
 	interactable_created.emit(customer.get_order_target())
@@ -79,5 +80,15 @@ func _on_customer_reached_seat(customer_id: String) -> void:
 	):
 		push_error(
 			"Could not create order for seated customer: %s"
+			% customer_id
+		)
+
+
+func _on_customer_finished_eating(customer_id: String) -> void:
+	if not GameManager.mark_customer_finished_eating(
+		customer_id
+	):
+		push_error(
+			"Could not finish meal for customer: %s"
 			% customer_id
 		)

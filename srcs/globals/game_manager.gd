@@ -16,9 +16,13 @@ const CUSTOMER_ENTERING: String = "entering"
 const CUSTOMER_MOVING_TO_SEAT: String = "moving_to_seat"
 const CUSTOMER_WAITING_FOR_ORDER: String = "waiting_for_order"
 const CUSTOMER_WAITING_FOR_FOOD: String = "waiting_for_food"
+const CUSTOMER_EATING: String = "eating"
+const CUSTOMER_WAITING_FOR_PAYMENT: String = "waiting_for_payment"
 const ORDER_WAITING: String = "waiting"
 const ORDER_PREPARING: String = "preparing"
 const ORDER_READY_TO_SERVE: String = "ready_to_serve"
+const ORDER_EATING: String = "eating"
+const ORDER_WAITING_FOR_PAYMENT: String = "waiting_for_payment"
 
 const PREP_NEED_MACKEREL: String = "need_mackerel"
 const PREP_NEED_RICE: String = "need_rice"
@@ -385,6 +389,71 @@ func get_day_order(customer_id: String) -> Dictionary:
 	if not orders.has(customer_id):
 		return {}
 	return Dictionary(orders[customer_id]).duplicate(true)
+
+
+func try_serve_order(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var orders: Dictionary = day_runtime["orders"]
+	var customers: Dictionary = day_runtime["customers"]
+	if (
+		not orders.has(customer_id)
+		or not customers.has(customer_id)
+	):
+		return false
+
+	var order: Dictionary = orders[customer_id]
+	var customer: Dictionary = customers[customer_id]
+	var carried_item: Dictionary = day_runtime["carried_item"]
+	if (
+		String(order.get("status", ""))
+		!= ORDER_READY_TO_SERVE
+		or String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_FOOD
+		or String(carried_item.get("kind", ""))
+		!= CARRIED_KIND_PLATE
+		or String(carried_item.get("customer_id", ""))
+		!= customer_id
+		or String(carried_item.get("menu", ""))
+		!= String(order.get("menu", ""))
+	):
+		return false
+
+	order["status"] = ORDER_EATING
+	customer["state"] = CUSTOMER_EATING
+	day_runtime["carried_item"] = {
+		"kind": "",
+		"menu": "",
+		"count": 0,
+	}
+	state_changed.emit()
+	return true
+
+
+func mark_customer_finished_eating(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var orders: Dictionary = day_runtime["orders"]
+	var customers: Dictionary = day_runtime["customers"]
+	if (
+		not orders.has(customer_id)
+		or not customers.has(customer_id)
+	):
+		return false
+
+	var order: Dictionary = orders[customer_id]
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(order.get("status", "")) != ORDER_EATING
+		or String(customer.get("state", ""))
+		!= CUSTOMER_EATING
+	):
+		return false
+
+	order["status"] = ORDER_WAITING_FOR_PAYMENT
+	customer["state"] = CUSTOMER_WAITING_FOR_PAYMENT
+	state_changed.emit()
+	return true
 
 
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:

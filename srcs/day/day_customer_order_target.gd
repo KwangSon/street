@@ -29,6 +29,14 @@ func _ready() -> void:
 
 
 func get_interaction_priority(_player: DayPlayer) -> int:
+	var customer: Dictionary = GameManager.get_day_customer(
+		_customer_id
+	)
+	if (
+		String(customer.get("state", ""))
+		== GameManager.CUSTOMER_WAITING_FOR_FOOD
+	):
+		return DayInteractionController.PRIORITY_DROP_OFF
 	return DayInteractionController.PRIORITY_ORDER_CUSTOMER
 
 
@@ -39,10 +47,18 @@ func is_player_in_range(
 	var customer: Dictionary = GameManager.get_day_customer(
 		_customer_id
 	)
-	if (
-		String(customer.get("state", ""))
-		!= GameManager.CUSTOMER_WAITING_FOR_ORDER
-	):
+	var customer_state: String = String(
+		customer.get("state", "")
+	)
+	var can_accept_order: bool = (
+		customer_state == GameManager.CUSTOMER_WAITING_FOR_ORDER
+		and not GameManager.is_player_carrying_item()
+	)
+	var can_serve: bool = (
+		customer_state == GameManager.CUSTOMER_WAITING_FOR_FOOD
+		and _is_matching_plate_carried()
+	)
+	if not can_accept_order and not can_serve:
 		return false
 	return (
 		global_position.distance_to(player_position)
@@ -57,9 +73,28 @@ func get_interaction_distance_squared(
 
 
 func interaction_entered(_player: DayPlayer) -> void:
-	GameManager.try_accept_waiting_order(_customer_id)
+	var customer: Dictionary = GameManager.get_day_customer(
+		_customer_id
+	)
+	if (
+		String(customer.get("state", ""))
+		== GameManager.CUSTOMER_WAITING_FOR_ORDER
+	):
+		GameManager.try_accept_waiting_order(_customer_id)
+	else:
+		GameManager.try_serve_order(_customer_id)
 
 
 func set_interaction_highlighted(highlighted: bool) -> void:
 	if _highlight != null:
 		_highlight.visible = highlighted
+
+
+func _is_matching_plate_carried() -> bool:
+	var carried_item: Dictionary = GameManager.get_carried_item()
+	return (
+		String(carried_item.get("kind", ""))
+		== GameManager.CARRIED_KIND_PLATE
+		and String(carried_item.get("customer_id", ""))
+		== _customer_id
+	)

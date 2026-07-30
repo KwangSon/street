@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, an initial seated mackerel-order customer, mackerel crafting, completed-plate pickup, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, an initial seated mackerel-order customer, ordered mackerel preparation, matching-order serving, eating, and GUT coverage for this foundation.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -44,6 +44,7 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, bounded drag camera, interaction selection, and the mackerel station entirely from GDScript.
 - `DayInteractionController` chooses one nearby target by explicit priority and then distance. `MackerelStation` owns only its local craft progress; orders, ingredient counts, preparation steps, and the player's carried item remain in `GameManager.state`.
 - `DayCustomerManager` currently creates the first customer, reserves Seat 1, and creates a mackerel order after arrival. Customer, seat, and order records are authoritative in `GameManager.state`; node position and movement remain screen-local.
+- A finished plate keeps its customer ID. Only that customer can receive it; serving clears the player's carried item and advances the customer through eating to payment waiting.
 - Daytime mackerel production is strict: accept one customer order, collect one mackerel at the ingredient box, collect one rice at the rice pot, then work at the mackerel station. Approaching the station without those steps must not craft anything.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.

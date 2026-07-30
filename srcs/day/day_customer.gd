@@ -2,6 +2,7 @@ extends CharacterBody2D
 class_name DayCustomer
 
 signal reached_seat(customer_id: String)
+signal finished_eating(customer_id: String)
 
 const DayCustomerOrderTargetScript: Script = preload(
 	"res://srcs/day/day_customer_order_target.gd"
@@ -13,12 +14,16 @@ const BODY_COLOR: Color = Color("5f83a3")
 const ORDER_BUBBLE_COLOR: Color = Color("fff4d6")
 const TEXT_COLOR: Color = Color("35291f")
 
+var eating_duration: float = 2.0
+
 var _customer_id: String = ""
 var _seat_target: Vector2 = Vector2.ZERO
 var _moving_to_seat: bool = false
 var _order_bubble: Node2D
 var _order_label: Label
 var _order_target: DayCustomerOrderTarget
+var _eating_time_remaining: float = 0.0
+var _is_eating: bool = false
 
 
 func configure(
@@ -45,23 +50,18 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not _moving_to_seat:
-		velocity = Vector2.ZERO
+	if _moving_to_seat:
+		_move_to_seat(delta)
 		return
 
-	var offset: Vector2 = _seat_target - position
-	if offset.length() <= ARRIVAL_DISTANCE:
-		position = _seat_target
-		velocity = Vector2.ZERO
-		_moving_to_seat = false
-		reached_seat.emit(_customer_id)
+	velocity = Vector2.ZERO
+	if not _is_eating:
 		return
-
-	velocity = offset.normalized() * minf(
-		MOVE_SPEED,
-		offset.length() / maxf(delta, 0.0001)
-	)
-	move_and_slide()
+	_eating_time_remaining -= maxf(delta, 0.0)
+	if _eating_time_remaining > 0.0:
+		return
+	_is_eating = false
+	finished_eating.emit(_customer_id)
 
 
 func get_customer_id() -> String:
@@ -148,13 +148,42 @@ func _refresh_from_state() -> void:
 	var customer_state: String = String(
 		customer.get("state", "")
 	)
+	if customer_state == GameManager.CUSTOMER_EATING:
+		if not _is_eating:
+			_is_eating = true
+			_eating_time_remaining = maxf(eating_duration, 0.001)
+	else:
+		_is_eating = false
 	_order_bubble.visible = customer_state in [
 		GameManager.CUSTOMER_WAITING_FOR_ORDER,
 		GameManager.CUSTOMER_WAITING_FOR_FOOD,
+		GameManager.CUSTOMER_EATING,
+		GameManager.CUSTOMER_WAITING_FOR_PAYMENT,
 	]
-	if customer_state == GameManager.CUSTOMER_WAITING_FOR_FOOD:
-		_order_label.text = "조리 중"
-	else:
-		_order_label.text = "고등어" if (
-			menu_id == GameManager.MENU_MACKEREL
-		) else menu_id
+	match customer_state:
+		GameManager.CUSTOMER_WAITING_FOR_FOOD:
+			_order_label.text = "조리 중"
+		GameManager.CUSTOMER_EATING:
+			_order_label.text = "냠냠"
+		GameManager.CUSTOMER_WAITING_FOR_PAYMENT:
+			_order_label.text = "계산"
+		_:
+			_order_label.text = "고등어" if (
+				menu_id == GameManager.MENU_MACKEREL
+			) else menu_id
+
+
+func _move_to_seat(delta: float) -> void:
+	var offset: Vector2 = _seat_target - position
+	if offset.length() <= ARRIVAL_DISTANCE:
+		position = _seat_target
+		velocity = Vector2.ZERO
+		_moving_to_seat = false
+		reached_seat.emit(_customer_id)
+		return
+
+	velocity = offset.normalized() * minf(
+		MOVE_SPEED,
+		offset.length() / maxf(delta, 0.0001)
+	)
+	move_and_slide()
