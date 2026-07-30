@@ -281,6 +281,154 @@ func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 	)
 
 
+func test_first_sale_completes_with_real_movement_under_thirty_seconds() -> void:
+	var screen: DayScreen = await _create_screen()
+	var elapsed_frames: int = 0
+
+	var waited_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_day_customer(
+						"customer_1"
+					).get("state", "")
+				)
+				== GameManager.CUSTOMER_WAITING_FOR_ORDER
+			),
+		240
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 240)
+
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	assert_true(
+		screen.request_player_move_to_world(customer.position)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_carried_item().get("step", "")
+				)
+				== GameManager.PREP_NEED_MACKEREL
+			),
+		120
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 120)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_ingredient_box().position
+		)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_carried_item().get("step", "")
+				)
+				== GameManager.PREP_NEED_RICE
+			),
+		240
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 240)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_rice_pot().position
+		)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_carried_item().get("step", "")
+				)
+				== GameManager.PREP_READY_TO_COOK
+			),
+		180
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 180)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_mackerel_station().position
+		)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_carried_item().get("kind", "")
+				)
+				== GameManager.CARRIED_KIND_PLATE
+			),
+		420
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 420)
+
+	assert_true(
+		screen.request_player_move_to_world(customer.position)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_day_customer(
+						"customer_1"
+					).get("state", "")
+				)
+				== GameManager.CUSTOMER_EATING
+			),
+		240
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 240)
+
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return (
+				screen.get_customer_manager().get_payment(
+					"customer_1"
+				)
+				!= null
+			),
+		180
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 180)
+	var payment: DayPayment = (
+		screen.get_customer_manager().get_payment("customer_1")
+	)
+	assert_not_null(payment)
+	if payment == null:
+		return
+
+	assert_true(
+		screen.request_player_move_to_world(payment.position)
+	)
+	waited_frames = await _wait_for_condition(
+		func() -> bool:
+			return int(GameManager.state.get("currency", 0)) == 6,
+		180
+	)
+	elapsed_frames += waited_frames
+	assert_lte(waited_frames, 180)
+
+	assert_lte(elapsed_frames, 30 * 60)
+	assert_eq(GameManager.state["currency"], 6)
+	assert_eq(
+		GameManager.state["day_stats"]["plates_sold"]["mackerel"],
+		1
+	)
+
+
 func test_touch_tap_sets_world_destination() -> void:
 	var screen: DayScreen = await _create_screen()
 	var tap_position: Vector2 = Vector2(460.0, 640.0)
@@ -551,6 +699,17 @@ func _create_screen() -> DayScreen:
 	add_child_autofree(screen)
 	await wait_process_frames(1)
 	return screen
+
+
+func _wait_for_condition(
+	condition: Callable,
+	max_frames: int
+) -> int:
+	for elapsed_frames: int in range(max_frames + 1):
+		if bool(condition.call()):
+			return elapsed_frames
+		await get_tree().physics_frame
+	return max_frames + 1
 
 
 func _touch_event(
