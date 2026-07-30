@@ -39,6 +39,7 @@
 - `srcs/globals/game_manager.gd`: `state`와 첫날 기본 상태를 맡는 오토로드
 - `srcs/globals/save_manager.gd`: `user://save.json` 읽기·쓰기·백업을 맡는 오토로드
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
+- `export_presets.cfg`: ARM64 Android 디버그 내보내기 설정
 - 실행용 메인 장면이 `project.godot`에 등록돼 있다.
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
 - 좌석 1이 차 있으면 3초 간격으로 최대 3명이 입구에 대기한다. 결제 손님이 퇴장하면 대기열의 첫 손님이 좌석으로 이동하고 새 손님이 맨 뒤를 채운다.
@@ -53,6 +54,7 @@
 - 구매 확정 후 쌀은 `쌀가마 → 씻기 → 밥 짓기 → 밥통`, 고등어는 `생선 상자 → 세척 → 손질 → 얼음 상자` 순으로 배치 전체를 준비한다.
 - 두 배치를 각각 5인분 이상 완료하면 Day 2, 5분 영업 상태를 JSON에 저장하고 인자 없는 화면 전환 신호로 `DayScreen`을 다시 생성한다.
 - 상태 기반 P0 회귀는 Day 1의 20접시 판매·성장 구매부터 정산·시장·준비·Day 2 저장 재로드까지 3회 연속 검증한다.
+- ARM64 Android 디버그 APK를 생성·서명하고 Android 16 에뮬레이터에서 첫 실행, Day 1 진입과 탭 이동을 확인했다. 실제 기기와 최소 3명 플레이테스트는 P0 최종 승인 전에 별도로 필요하다.
 
 ## 개발 원칙
 
@@ -104,6 +106,7 @@ street/
 │   └── main.tscn      # 기존 부트스트랩 장면
 ├── tests/             # GUT 프로젝트 테스트
 ├── .gutconfig.json
+├── export_presets.cfg # ARM64 Android 디버그 프리셋
 └── project.godot
 ```
 
@@ -127,6 +130,14 @@ Godot 4.7.x가 필요하다. 현재 개발 환경에서 확인한 버전은 4.7.
 ```bash
 ./godot --headless -s --path "$PWD" addons/gut/gut_cmdln.gd \
   -gdir=res://tests -gexit
+```
+
+Android SDK와 Godot 4.7.1 Android 내보내기 템플릿을 설치한 환경에서는 다음 명령으로 서명된 디버그 APK를 만든다. 생성물은 `build/` 아래에 놓이며 Git에 포함하지 않는다.
+
+```bash
+mkdir -p build/android
+./godot --headless --path "$PWD" \
+  --export-debug Android build/android/street-debug.apk
 ```
 
 ## 문서 상태 표기
