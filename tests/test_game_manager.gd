@@ -21,6 +21,7 @@ func test_default_state_starts_first_day_service() -> void:
 	assert_eq(state["inventory"]["ready"]["mackerel"], 20)
 	assert_eq(state["day_runtime"]["carried_item"]["count"], 0)
 	assert_true(state["day_runtime"]["customers"].is_empty())
+	assert_true(state["day_runtime"]["customer_queue"].is_empty())
 	assert_true(state["day_runtime"]["seat_assignments"].is_empty())
 	assert_true(state["day_runtime"]["orders"].is_empty())
 	assert_true(state["day_runtime"]["payments"].is_empty())
@@ -288,6 +289,54 @@ func test_customer_reserves_one_seat_and_creates_mackerel_order() -> void:
 	assert_eq(
 		waiting_orders[0]["customer_id"],
 		first_customer_id
+	)
+
+
+func test_customer_queue_is_fifo_and_limited_to_three() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_ids: Array[String] = []
+	for _index: int in range(4):
+		customer_ids.append(GameManager.create_day_customer())
+
+	assert_true(GameManager.try_enqueue_day_customer(customer_ids[0]))
+	assert_true(GameManager.try_enqueue_day_customer(customer_ids[1]))
+	assert_true(GameManager.try_enqueue_day_customer(customer_ids[2]))
+	assert_false(
+		GameManager.try_enqueue_day_customer(customer_ids[3])
+	)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_1",
+			"customer_2",
+			"customer_3",
+		]
+	)
+	assert_false(
+		GameManager.try_enqueue_day_customer(customer_ids[1])
+	)
+
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_ids[0],
+			"seat_1"
+		)
+	)
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_2",
+			"customer_3",
+		]
+	)
+	assert_true(GameManager.try_enqueue_day_customer(customer_ids[3]))
+	assert_eq(
+		GameManager.get_customer_queue(),
+		[
+			"customer_2",
+			"customer_3",
+			"customer_4",
+		]
 	)
 
 

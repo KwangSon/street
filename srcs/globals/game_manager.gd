@@ -13,6 +13,7 @@ const CARRIED_KIND_PLATE: String = "plate"
 const CARRIED_KIND_ORDER_PREP: String = "order_prep"
 
 const CUSTOMER_ENTERING: String = "entering"
+const CUSTOMER_WAITING_IN_QUEUE: String = "waiting_in_queue"
 const CUSTOMER_MOVING_TO_SEAT: String = "moving_to_seat"
 const CUSTOMER_WAITING_FOR_ORDER: String = "waiting_for_order"
 const CUSTOMER_WAITING_FOR_FOOD: String = "waiting_for_food"
@@ -29,6 +30,7 @@ const PAYMENT_WAITING: String = "waiting"
 const PAYMENT_COLLECTED: String = "collected"
 
 const MACKEREL_PRICE: int = 6
+const MAX_CUSTOMER_QUEUE: int = 3
 
 const PREP_NEED_MACKEREL: String = "need_mackerel"
 const PREP_NEED_RICE: String = "need_rice"
@@ -190,8 +192,46 @@ func try_assign_customer_to_seat(
 	customer["seat_id"] = seat_id
 	customer["state"] = CUSTOMER_MOVING_TO_SEAT
 	seat_assignments[seat_id] = customer_id
+	var customer_queue: Array = day_runtime["customer_queue"]
+	customer_queue.erase(customer_id)
 	state_changed.emit()
 	return true
+
+
+func try_enqueue_day_customer(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id):
+		return false
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(customer.get("state", ""))
+		!= CUSTOMER_ENTERING
+	):
+		return false
+
+	var customer_queue: Array = day_runtime["customer_queue"]
+	if (
+		customer_queue.size() >= MAX_CUSTOMER_QUEUE
+		or customer_queue.has(customer_id)
+	):
+		return false
+	customer_queue.append(customer_id)
+	customer["state"] = CUSTOMER_WAITING_IN_QUEUE
+	state_changed.emit()
+	return true
+
+
+func get_customer_queue() -> Array[String]:
+	_ensure_day_runtime_state()
+	var result: Array[String] = []
+	var customer_queue: Array = (
+		state["day_runtime"]["customer_queue"]
+	)
+	for customer_id: Variant in customer_queue:
+		result.append(String(customer_id))
+	return result
 
 
 func mark_customer_seated(
@@ -523,6 +563,7 @@ func finish_customer_exit(customer_id: String) -> bool:
 	var seat_assignments: Dictionary = (
 		day_runtime["seat_assignments"]
 	)
+	day_runtime["customer_queue"].erase(customer_id)
 	if (
 		not seat_id.is_empty()
 		and String(seat_assignments.get(seat_id, ""))
@@ -591,6 +632,7 @@ func _create_default_day_runtime() -> Dictionary:
 	return {
 		"next_customer_id": 1,
 		"customers": {},
+		"customer_queue": [],
 		"seat_assignments": {},
 		"orders": {},
 		"payments": {},
@@ -709,6 +751,39 @@ func _ensure_day_runtime_state() -> bool:
 		elif not day_runtime.has(dictionary_key):
 			day_runtime[dictionary_key] = dictionary_value
 			changed = true
+
+	var customer_queue_value: Variant = day_runtime.get(
+		"customer_queue",
+		[]
+	)
+	if not customer_queue_value is Array:
+		customer_queue_value = []
+		changed = true
+	var customers_for_queue: Dictionary = day_runtime["customers"]
+	var normalized_queue: Array = []
+	for queued_customer_value: Variant in customer_queue_value:
+		if normalized_queue.size() >= MAX_CUSTOMER_QUEUE:
+			changed = true
+			break
+		if typeof(queued_customer_value) != TYPE_STRING:
+			changed = true
+			continue
+		var queued_customer_id: String = String(
+			queued_customer_value
+		)
+		if (
+			not customers_for_queue.has(queued_customer_id)
+			or normalized_queue.has(queued_customer_id)
+		):
+			changed = true
+			continue
+		normalized_queue.append(queued_customer_id)
+	if (
+		not day_runtime.has("customer_queue")
+		or day_runtime["customer_queue"] != normalized_queue
+	):
+		day_runtime["customer_queue"] = normalized_queue
+		changed = true
 
 	var next_customer_value: Variant = day_runtime.get(
 		"next_customer_id",
