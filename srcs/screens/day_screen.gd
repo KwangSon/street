@@ -690,7 +690,7 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 		hud,
 		"DayLabel",
 		"Day %d" % day,
-		Rect2(24.0, 14.0, 180.0, 42.0),
+		Rect2(144.0, 14.0, 120.0, 42.0),
 		HORIZONTAL_ALIGNMENT_LEFT
 	)
 	_time_label = _add_hud_label(

@@ -38,7 +38,9 @@ func _ready() -> void:
 		_on_game_state_changed
 	):
 		GameManager.state_changed.connect(_on_game_state_changed)
-	if GameManager.is_accepting_customers():
+	if not GameManager.get_day_customer_ids().is_empty():
+		call_deferred("_restore_customers_from_state")
+	elif GameManager.is_accepting_customers():
 		call_deferred("_spawn_customer")
 	else:
 		call_deferred("_dismiss_unordered_customers")
@@ -118,8 +120,7 @@ func _spawn_customer() -> void:
 	):
 		return
 
-	var customer: DayCustomer = DayCustomerScript.new()
-	customer.configure(
+	var customer: DayCustomer = _create_customer_node(
 		customer_id,
 		_entrance_position
 	)
@@ -130,12 +131,116 @@ func _spawn_customer() -> void:
 		customer.move_to_queue(_get_queue_target(queue_index))
 	else:
 		customer.assign_seat(Vector2(_seat_targets[seat_id]))
+
+
+func _create_customer_node(
+	customer_id: String,
+	start_position: Vector2
+) -> DayCustomer:
+	var customer: DayCustomer = DayCustomerScript.new()
+	customer.configure(customer_id, start_position)
 	customer.reached_seat.connect(_on_customer_reached_seat)
 	customer.finished_eating.connect(_on_customer_finished_eating)
 	customer.exited.connect(_on_customer_exited)
 	_customers[customer_id] = customer
 	add_child(customer)
 	interactable_created.emit(customer.get_order_target())
+	return customer
+
+
+func _restore_customers_from_state() -> void:
+	var customer_queue: Array[String] = (
+		GameManager.get_customer_queue()
+	)
+	for customer_id: String in GameManager.get_day_customer_ids():
+		var customer_data: Dictionary = (
+			GameManager.get_day_customer(customer_id)
+		)
+		var customer_state: String = String(
+			customer_data.get("state", "")
+		)
+		var seat_id: String = String(
+			customer_data.get("seat_id", "")
+		)
+		var seat_position: Vector2 = _entrance_position
+		if _seat_targets.has(seat_id):
+			seat_position = Vector2(_seat_targets[seat_id])
+		var queue_index: int = customer_queue.find(customer_id)
+		var start_position: Vector2 = seat_position
+		if customer_state in [
+			GameManager.CUSTOMER_ENTERING,
+			GameManager.CUSTOMER_MOVING_TO_SEAT,
+		]:
+			start_position = _entrance_position
+		elif (
+			customer_state
+			== GameManager.CUSTOMER_WAITING_IN_QUEUE
+		):
+			start_position = _get_queue_target(queue_index)
+
+		var customer: DayCustomer = _create_customer_node(
+			customer_id,
+			start_position
+		)
+		match customer_state:
+			GameManager.CUSTOMER_MOVING_TO_SEAT:
+				if _seat_targets.has(seat_id):
+					customer.assign_seat(seat_position)
+			GameManager.CUSTOMER_WAITING_IN_QUEUE:
+				customer.position = _get_queue_target(queue_index)
+			GameManager.CUSTOMER_LEAVING:
+				customer.start_leaving(_entrance_position)
+			GameManager.CUSTOMER_ENTERING:
+				if _seat_targets.has(seat_id):
+					customer.assign_seat(seat_position)
+				elif queue_index >= 0:
+					customer.move_to_queue(
+						_get_queue_target(queue_index)
+					)
+				elif GameManager.dismiss_unordered_customer(
+					customer_id
+				):
+					customer.start_leaving(_entrance_position)
+			_:
+				customer.position = seat_position
+
+		if (
+			customer_state
+			== GameManager.CUSTOMER_WAITING_FOR_PAYMENT
+		):
+			_restore_payment_for_customer(customer_id, customer)
+
+	_refresh_queue_targets()
+	if not GameManager.is_accepting_customers():
+		_dismiss_unordered_customers()
+	elif _customers.is_empty():
+		_spawn_customer()
+
+
+func _restore_payment_for_customer(
+	customer_id: String,
+	customer: DayCustomer
+) -> void:
+	if _payments.has(customer_id):
+		return
+	var payment_data: Dictionary = (
+		GameManager.get_customer_payment(customer_id)
+	)
+	if (
+		String(payment_data.get("status", ""))
+		!= GameManager.PAYMENT_WAITING
+	):
+		return
+	var payment: DayPayment = DayPaymentScript.new()
+	payment.configure(
+		customer_id,
+		int(payment_data.get("amount", 0)),
+		customer.position + Vector2(100.0, 40.0)
+	)
+	payment.payment_collected.connect(_on_payment_collected)
+	_payments[customer_id] = payment
+	add_child(payment)
+	interactable_created.emit(payment)
 
 
 func _find_available_seat_id() -> String:
@@ -236,19 +341,8 @@ func _on_customer_finished_eating(customer_id: String) -> void:
 		return
 
 	var customer: DayCustomer = get_customer(customer_id)
-	var payment_data: Dictionary = (
-		GameManager.get_customer_payment(customer_id)
-	)
-	var payment: DayPayment = DayPaymentScript.new()
-	payment.configure(
-		customer_id,
-		int(payment_data["amount"]),
-		customer.position + Vector2(100.0, 40.0)
-	)
-	payment.payment_collected.connect(_on_payment_collected)
-	_payments[customer_id] = payment
-	add_child(payment)
-	interactable_created.emit(payment)
+	if customer != null:
+		_restore_payment_for_customer(customer_id, customer)
 
 
 func _on_payment_collected(customer_id: String) -> void:

@@ -535,6 +535,43 @@ func test_initial_customer_reserves_seat_and_shows_order() -> void:
 	)
 
 
+func test_saved_payment_customer_is_restored_without_duplicate_spawn() -> void:
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_true(GameManager.try_serve_order(customer_id))
+	assert_true(GameManager.mark_customer_finished_eating(customer_id))
+
+	var screen: DayScreen = await _create_screen()
+	await wait_process_frames(2)
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+
+	assert_eq(GameManager.get_day_customer_ids().size(), 1)
+	assert_not_null(customer_manager.get_customer(customer_id))
+	assert_not_null(customer_manager.get_payment(customer_id))
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_WAITING_FOR_PAYMENT
+	)
+
+
 func test_screen_customer_queue_stops_at_three_waiting() -> void:
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (

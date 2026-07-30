@@ -54,6 +54,7 @@ func _ready() -> void:
 	name = "Server"
 	z_index = 4
 	_build_visual()
+	_recover_interrupted_delivery()
 	if not GameManager.state_changed.is_connected(
 		_refresh_visual
 	):
@@ -83,6 +84,22 @@ func get_customer_id() -> String:
 
 func is_carrying_plate() -> bool:
 	return not GameManager.get_server_carried_item().is_empty()
+
+
+func _recover_interrupted_delivery() -> void:
+	var server_item: Dictionary = (
+		GameManager.get_server_carried_item()
+	)
+	var station_item: Dictionary = GameManager.get_station_item()
+	var customer_id: String = String(
+		server_item.get(
+			"customer_id",
+			station_item.get("customer_id", "")
+		)
+	)
+	if customer_id.is_empty():
+		return
+	GameManager.cancel_server_plate_delivery(customer_id)
 
 
 func _find_next_plate() -> void:

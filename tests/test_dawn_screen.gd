@@ -186,7 +186,7 @@ func test_unlocked_egg_purchase_and_preparation_reaches_day_two() -> void:
 	assert_eq(GameManager.state["inventory"]["ready"]["egg"], 5)
 
 
-func test_prepare_button_confirms_market_and_saves_checkpoint() -> void:
+func test_prepare_button_confirms_market_without_saving() -> void:
 	var screen: DawnScreen = await _create_screen()
 	assert_true(GameManager.try_purchase_market_bundle("rice"))
 	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
@@ -201,13 +201,7 @@ func test_prepare_button_confirms_market_and_saves_checkpoint() -> void:
 	assert_false(screen.get_refund_button().visible)
 	assert_eq(screen.get_prepare_button().text, "준비 완료 · Day 시작")
 	assert_true(screen.get_prepare_button().disabled)
-	assert_true(FileAccess.file_exists(TEST_PATH))
-	var loaded_result: Dictionary = SaveManager.load_game_state(TEST_PATH)
-	assert_eq(loaded_result["status"], SaveManager.LoadStatus.OK)
-	assert_eq(
-		loaded_result["state"]["phase"],
-		GameManager.PHASE_PREP
-	)
+	assert_false(FileAccess.file_exists(TEST_PATH))
 
 
 func test_preparation_stations_enforce_order_and_start_day_two() -> void:
@@ -260,22 +254,11 @@ func test_preparation_stations_enforce_order_and_start_day_two() -> void:
 	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAY)
 	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
 	assert_signal_emitted(screen, "screen_change_requested")
-	assert_true(FileAccess.file_exists(TEST_PATH))
-	var loaded_result: Dictionary = SaveManager.load_game_state(TEST_PATH)
-	assert_eq(loaded_result["status"], SaveManager.LoadStatus.OK)
-	assert_eq(int(loaded_result["state"]["day"]), 2)
-	assert_eq(
-		int(
-			loaded_result["state"]["inventory"]["ready"]["rice"]
-		),
-		5
-	)
-	assert_false(loaded_result["state"].has("dawn_runtime"))
+	assert_false(FileAccess.file_exists(TEST_PATH))
 
 
 func _create_screen() -> DawnScreen:
 	var screen: DawnScreen = DawnScreenScript.new()
-	screen.save_path = TEST_PATH
 	add_child_autofree(screen)
 	await wait_process_frames(1)
 	return screen

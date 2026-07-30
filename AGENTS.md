@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen` and `DawnScreen`, JSON save loading, the complete P0 Day 1 loop through settlement, dawn market purchase/refund, ordered batch preparation, the saved Day 2 transition, purchasable Seats 3–4, the egg unlock and Lv.1–3 production loop, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, a Day-screen-only top-left pause menu with confirmed single-slot new-game replacement, 30-second Day autosaves, `LoadingScreen`, the code-built `DayScreen` and `DawnScreen`, JSON save loading, the complete P0 Day 1 loop through settlement, dawn market purchase/refund, ordered batch preparation, the Day 2 transition, purchasable Seats 3–4, the egg unlock and Lv.1–3 production loop, and GUT coverage for this foundation.
 - `tests/test_p0_loop.gd` runs the state-authoritative Day 1 growth, 20 sales, settlement, dawn purchase/preparation, Day 2 transition, save, and reload three consecutive times.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
@@ -40,7 +40,7 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 
 - `srcs/main.tscn` is the existing bootstrap scene.
 - `project.godot` autoloads `GameManager` and `SaveManager`.
-- `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
+- `Main` owns screen creation and replacement plus the Day-screen menu, pause/resume, and periodic autosave. The menu and save timer are disabled throughout the dawn market. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
 - `DawnScreen` owns only its code-built market/preparation presentation, tap movement, station interaction, and UI. Purchases, spending, raw and ready inventory, preparation steps, prepared amounts, and phase remain authoritative in `GameManager.state`.
 - `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, bounded drag camera, interaction selection, menu stations, and growth purchase pads entirely from GDScript.
@@ -56,11 +56,11 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `GameManager.tick_service_time()` owns the authoritative countdown. At zero, `DayCustomerManager` stops spawning, dismisses only customers who have not ordered, and leaves existing orders playable through payment and exit.
 - Settlement begins only after the timer is zero and customers, orders, payments, carried plates, and station plates are all cleared. `GameManager` snapshots sales and departures, discards remaining ready and raw inventory once, calculates waste cost, and changes the day phase to `settlement`; `DayScreen` only renders that state.
 - Dawn market pads buy fixed five-portion bundles every second while occupied. Before preparation is confirmed, `GameManager.refund_market_purchases()` must restore both the exact currency spent and all raw quantities bought in that market session.
-- Dawn preparation processes the whole purchased batch in four ordered one-second stations per material, including egg after its unlock. It may start the next day only after at least five rice and five mackerel portions are ready and every purchased batch has been prepared; market-confirmed and completed-preparation states are JSON checkpoints.
+- Dawn preparation processes the whole purchased batch in four ordered one-second stations per material, including egg after its unlock. It may start the next day only after at least five rice and five mackerel portions are ready and every purchased batch has been prepared. Dawn has no menu or save checkpoint; saving resumes after the next `DayScreen` is created.
 - Daytime production is strict: accept one customer order, collect its matching topping, collect one rice, then work at the matching menu station. Approaching the wrong station or skipping a step must not craft anything.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
-- `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.
+- `SaveManager` serializes and restores the confirmed `GameManager` state in the single `user://save.json` slot. `Main` saves every 30 seconds during Day play and at Day phase boundaries. It does not save during dawn market or preparation. Keep gameplay rules out of `SaveManager`.
 - Feature-local behavior such as movement, customer flow, station interaction, animation, and rendering belongs in focused scripts under `srcs/`, not in the autoloads.
 - Gameplay movement is touch-only. A tap sets a world destination and a drag moves the camera. Desktop testing uses mouse clicks and drags; do not add keyboard movement.
 

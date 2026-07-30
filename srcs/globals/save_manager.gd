@@ -9,6 +9,7 @@ enum LoadStatus {
 }
 
 const SAVE_PATH: String = "user://save.json"
+const SAVE_SLOT_COUNT: int = 1
 const TEMP_SUFFIX: String = ".tmp"
 const CORRUPT_SUFFIX: String = ".corrupt"
 

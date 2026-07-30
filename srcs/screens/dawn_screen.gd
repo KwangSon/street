@@ -103,7 +103,6 @@ const PREPARATION_STATIONS: Array[Dictionary] = [
 	},
 ]
 
-var save_path: String = SaveManager.SAVE_PATH
 var _world: Node2D
 var _player: DayPlayer
 var _interaction_controller: DayInteractionController
@@ -483,7 +482,6 @@ func _on_prepare_pressed() -> void:
 				"쌀과 고등어를 각각 5인분 이상 구매하세요."
 			)
 			return
-		_save_checkpoint()
 		_status_label.text = "구매한 재료를 순서대로 준비하세요."
 		_refresh_ui(false)
 	elif phase == GameManager.PHASE_PREP:
@@ -492,20 +490,7 @@ func _on_prepare_pressed() -> void:
 				"구매한 재료 준비를 모두 완료하세요."
 			)
 			return
-		_save_checkpoint()
 		screen_change_requested.emit()
-
-
-func _save_checkpoint() -> void:
-	var save_error: Error = SaveManager.save_game_state(
-		GameManager.state,
-		save_path
-	)
-	if save_error != OK:
-		push_error(
-			"Could not save dawn checkpoint: %s"
-			% error_string(save_error)
-		)
 
 
 func _refresh_ui(reset_status: bool = true) -> void:
