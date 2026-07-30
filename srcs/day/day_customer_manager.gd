@@ -1,6 +1,8 @@
 extends Node2D
 class_name DayCustomerManager
 
+signal interactable_created(interactable: DayInteractable)
+
 const DayCustomerScript: Script = preload(
 	"res://srcs/day/day_customer.gd"
 )
@@ -53,6 +55,7 @@ func _spawn_initial_customer() -> void:
 	customer.reached_seat.connect(_on_customer_reached_seat)
 	_customers[customer_id] = customer
 	add_child(customer)
+	interactable_created.emit(customer.get_order_target())
 
 
 func _find_available_seat_id() -> String:

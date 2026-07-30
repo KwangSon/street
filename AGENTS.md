@@ -42,9 +42,9 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
 - `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, bounded drag camera, interaction selection, and the mackerel station entirely from GDScript.
-- `DayInteractionController` chooses one nearby target by explicit priority and then distance. `MackerelStation` owns only its local craft progress; ingredient counts, completed plates, and the player's carried item remain in `GameManager.state`.
+- `DayInteractionController` chooses one nearby target by explicit priority and then distance. `MackerelStation` owns only its local craft progress; orders, ingredient counts, preparation steps, and the player's carried item remain in `GameManager.state`.
 - `DayCustomerManager` currently creates the first customer, reserves Seat 1, and creates a mackerel order after arrival. Customer, seat, and order records are authoritative in `GameManager.state`; node position and movement remain screen-local.
-- During daytime service, beginning one mackerel craft atomically consumes one prepared rice and one prepared mackerel. Do not add a separate daytime ingredient-hauling step; dawn preparation remains a separate later flow.
+- Daytime mackerel production is strict: accept one customer order, collect one mackerel at the ingredient box, collect one rice at the rice pot, then work at the mackerel station. Approaching the station without those steps must not craft anything.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
 - `SaveManager` serializes and restores the confirmed `GameManager` state at the save boundaries defined in `docs/`. Keep gameplay rules out of `SaveManager`.

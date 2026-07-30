@@ -18,6 +18,9 @@ const MackerelStationScript: Script = preload(
 const DayCustomerManagerScript: Script = preload(
 	"res://srcs/day/day_customer_manager.gd"
 )
+const DayPreparationSourceScript: Script = preload(
+	"res://srcs/day/day_preparation_source.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -108,6 +111,8 @@ var _navigation: DayNavigation
 var _interaction_controller: DayInteractionController
 var _mackerel_station: MackerelStation
 var _customer_manager: DayCustomerManager
+var _ingredient_box: DayPreparationSource
+var _rice_pot: DayPreparationSource
 var _inventory_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
@@ -196,6 +201,14 @@ func get_customer_manager() -> DayCustomerManager:
 	return _customer_manager
 
 
+func get_ingredient_box() -> DayPreparationSource:
+	return _ingredient_box
+
+
+func get_rice_pot() -> DayPreparationSource:
+	return _rice_pot
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -244,6 +257,8 @@ func _build_world() -> void:
 	_interaction_controller.name = "InteractionController"
 	_interaction_controller.configure(_player)
 	_interaction_controller.register_interactable(_mackerel_station)
+	_interaction_controller.register_interactable(_ingredient_box)
+	_interaction_controller.register_interactable(_rice_pot)
 	_world.add_child(_interaction_controller)
 
 	_customer_manager = DayCustomerManagerScript.new()
@@ -253,6 +268,9 @@ func _build_world() -> void:
 		{
 			"seat_1": Vector2(500.0, 750.0),
 		}
+	)
+	_customer_manager.interactable_created.connect(
+		_on_customer_interactable_created
 	)
 	_world.add_child(_customer_manager)
 
@@ -341,13 +359,34 @@ func _add_map_boundaries() -> void:
 
 func _add_facility(facility: Dictionary) -> void:
 	var facility_node: Node2D
-	if String(facility["name"]) == "MackerelStation":
+	var facility_name: String = String(facility["name"])
+	if facility_name == "MackerelStation":
 		_mackerel_station = MackerelStationScript.new()
 		_mackerel_station.configure(
 			facility["size"],
 			facility["color"]
 		)
 		facility_node = _mackerel_station
+	elif facility_name in ["IngredientBox", "RicePot"]:
+		var preparation_source: DayPreparationSource = (
+			DayPreparationSourceScript.new()
+		)
+		var source_kind: DayPreparationSource.SourceKind = (
+			DayPreparationSource.SourceKind.MACKEREL
+			if facility_name == "IngredientBox"
+			else DayPreparationSource.SourceKind.RICE
+		)
+		preparation_source.configure(
+			source_kind,
+			facility["size"],
+			facility["color"],
+			String(facility["label"])
+		)
+		if facility_name == "IngredientBox":
+			_ingredient_box = preparation_source
+		else:
+			_rice_pot = preparation_source
+		facility_node = preparation_source
 	else:
 		facility_node = Node2D.new()
 	facility_node.name = String(facility["name"])
@@ -355,7 +394,11 @@ func _add_facility(facility: Dictionary) -> void:
 	_world.add_child(facility_node)
 
 	var facility_size: Vector2 = facility["size"]
-	if facility_node != _mackerel_station:
+	if (
+		facility_node != _mackerel_station
+		and facility_node != _ingredient_box
+		and facility_node != _rice_pot
+	):
 		var visual: Polygon2D = Polygon2D.new()
 		visual.name = "Visual"
 		visual.color = facility["color"]
@@ -581,6 +624,12 @@ func _on_game_state_changed() -> void:
 	_refresh_inventory_hud()
 	if _player != null:
 		_player.set_carried_item(GameManager.get_carried_item())
+
+
+func _on_customer_interactable_created(
+	interactable: DayInteractable
+) -> void:
+	_interaction_controller.register_interactable(interactable)
 
 
 func _refresh_inventory_hud() -> void:

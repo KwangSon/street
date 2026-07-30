@@ -10,11 +10,20 @@ const SCREEN_DAWN: String = "dawn"
 const MENU_MACKEREL: String = "mackerel"
 const MENU_EGG: String = "egg"
 const CARRIED_KIND_PLATE: String = "plate"
+const CARRIED_KIND_ORDER_PREP: String = "order_prep"
 
 const CUSTOMER_ENTERING: String = "entering"
 const CUSTOMER_MOVING_TO_SEAT: String = "moving_to_seat"
 const CUSTOMER_WAITING_FOR_ORDER: String = "waiting_for_order"
+const CUSTOMER_WAITING_FOR_FOOD: String = "waiting_for_food"
 const ORDER_WAITING: String = "waiting"
+const ORDER_PREPARING: String = "preparing"
+const ORDER_READY_TO_SERVE: String = "ready_to_serve"
+
+const PREP_NEED_MACKEREL: String = "need_mackerel"
+const PREP_NEED_RICE: String = "need_rice"
+const PREP_READY_TO_COOK: String = "ready_to_cook"
+const PREP_COOKING: String = "cooking"
 
 const PHASE_SERVICE: String = "service"
 const PHASE_SETTLEMENT: String = "settlement"
@@ -112,82 +121,6 @@ func apply_loaded_game_state(data: Dictionary) -> bool:
 func ensure_day_runtime_state() -> void:
 	if _ensure_day_runtime_state():
 		state_changed.emit()
-
-
-func try_consume_ready_ingredients(menu_id: String) -> bool:
-	_ensure_day_runtime_state()
-	var recipe: Dictionary = _get_recipe(menu_id)
-	if recipe.is_empty():
-		return false
-
-	var ready_inventory: Dictionary = _get_ready_inventory()
-	if not _has_recipe_ingredients(ready_inventory, recipe):
-		return false
-
-	for ingredient_id: String in recipe:
-		var required_amount: int = int(recipe[ingredient_id])
-		ready_inventory[ingredient_id] = (
-			int(ready_inventory[ingredient_id]) - required_amount
-		)
-	state_changed.emit()
-	return true
-
-
-func can_consume_ready_ingredients(menu_id: String) -> bool:
-	var recipe: Dictionary = _get_recipe(menu_id)
-	if recipe.is_empty():
-		return false
-	return _has_recipe_ingredients(_get_ready_inventory(), recipe)
-
-
-func add_completed_plate(menu_id: String, amount: int = 1) -> void:
-	if amount <= 0 or not _is_known_menu(menu_id):
-		return
-	_ensure_day_runtime_state()
-
-	var completed_plates: Dictionary = (
-		state["day_runtime"]["completed_plates"]
-	)
-	completed_plates[menu_id] = (
-		int(completed_plates.get(menu_id, 0)) + amount
-	)
-	state_changed.emit()
-
-
-func try_take_completed_plate(menu_id: String) -> bool:
-	if not _is_known_menu(menu_id):
-		return false
-	_ensure_day_runtime_state()
-
-	var day_runtime: Dictionary = state["day_runtime"]
-	var carried_item: Dictionary = day_runtime["carried_item"]
-	if (
-		String(carried_item.get("kind", "")) != ""
-		or int(carried_item.get("count", 0)) > 0
-	):
-		return false
-
-	var completed_plates: Dictionary = day_runtime["completed_plates"]
-	var plate_count: int = int(completed_plates.get(menu_id, 0))
-	if plate_count <= 0:
-		return false
-
-	completed_plates[menu_id] = plate_count - 1
-	day_runtime["carried_item"] = {
-		"kind": CARRIED_KIND_PLATE,
-		"menu": menu_id,
-		"count": 1,
-	}
-	state_changed.emit()
-	return true
-
-
-func get_completed_plate_count(menu_id: String) -> int:
-	_ensure_day_runtime_state()
-	var completed_plates: Dictionary = (
-		state["day_runtime"]["completed_plates"]
-	)
-	return int(completed_plates.get(menu_id, 0))
 
 
 func get_carried_item() -> Dictionary:
@@ -324,6 +257,136 @@ func get_waiting_orders() -> Array[Dictionary]:
 	return waiting_orders
 
 
+func try_accept_waiting_order(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	if is_player_carrying_item():
+		return false
+
+	var day_runtime: Dictionary = state["day_runtime"]
+	var orders: Dictionary = day_runtime["orders"]
+	if not orders.has(customer_id):
+		return false
+	var order: Dictionary = orders[customer_id]
+	if (
+		String(order.get("status", "")) != ORDER_WAITING
+		or String(order.get("menu", "")) != MENU_MACKEREL
+	):
+		return false
+
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id):
+		return false
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_ORDER
+	):
+		return false
+
+	order["status"] = ORDER_PREPARING
+	customer["state"] = CUSTOMER_WAITING_FOR_FOOD
+	day_runtime["carried_item"] = {
+		"kind": CARRIED_KIND_ORDER_PREP,
+		"menu": MENU_MACKEREL,
+		"count": 1,
+		"customer_id": customer_id,
+		"step": PREP_NEED_MACKEREL,
+	}
+	state_changed.emit()
+	return true
+
+
+func try_collect_mackerel_for_order() -> bool:
+	var carried_item: Dictionary = get_carried_item()
+	if not _is_prep_at_step(
+		carried_item,
+		PREP_NEED_MACKEREL
+	):
+		return false
+
+	var ready_inventory: Dictionary = _get_ready_inventory()
+	if (
+		int(ready_inventory.get("mackerel", 0)) < 1
+		or int(ready_inventory.get("rice", 0)) < 1
+	):
+		return false
+
+	ready_inventory["mackerel"] = (
+		int(ready_inventory["mackerel"]) - 1
+	)
+	carried_item["step"] = PREP_NEED_RICE
+	state["day_runtime"]["carried_item"] = carried_item
+	state_changed.emit()
+	return true
+
+
+func try_collect_rice_for_order() -> bool:
+	var carried_item: Dictionary = get_carried_item()
+	if not _is_prep_at_step(carried_item, PREP_NEED_RICE):
+		return false
+
+	var ready_inventory: Dictionary = _get_ready_inventory()
+	if int(ready_inventory.get("rice", 0)) < 1:
+		return false
+
+	ready_inventory["rice"] = int(ready_inventory["rice"]) - 1
+	carried_item["step"] = PREP_READY_TO_COOK
+	state["day_runtime"]["carried_item"] = carried_item
+	state_changed.emit()
+	return true
+
+
+func try_start_active_order_craft() -> bool:
+	var carried_item: Dictionary = get_carried_item()
+	var prep_step: String = String(carried_item.get("step", ""))
+	if prep_step == PREP_COOKING:
+		return true
+	if not _is_prep_at_step(
+		carried_item,
+		PREP_READY_TO_COOK
+	):
+		return false
+
+	carried_item["step"] = PREP_COOKING
+	state["day_runtime"]["carried_item"] = carried_item
+	state_changed.emit()
+	return true
+
+
+func complete_active_order_craft() -> bool:
+	var carried_item: Dictionary = get_carried_item()
+	if not _is_prep_at_step(carried_item, PREP_COOKING):
+		return false
+
+	var customer_id: String = String(
+		carried_item.get("customer_id", "")
+	)
+	var orders: Dictionary = state["day_runtime"]["orders"]
+	if not orders.has(customer_id):
+		return false
+	var order: Dictionary = orders[customer_id]
+	if String(order.get("status", "")) != ORDER_PREPARING:
+		return false
+
+	order["status"] = ORDER_READY_TO_SERVE
+	state["day_runtime"]["carried_item"] = {
+		"kind": CARRIED_KIND_PLATE,
+		"menu": MENU_MACKEREL,
+		"count": 1,
+		"customer_id": customer_id,
+	}
+	state_changed.emit()
+	return true
+
+
+func get_day_order(customer_id: String) -> Dictionary:
+	_ensure_day_runtime_state()
+	var orders: Dictionary = state["day_runtime"]["orders"]
+	if not orders.has(customer_id):
+		return {}
+	return Dictionary(orders[customer_id]).duplicate(true)
+
+
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
 	var required_keys: Array[String] = [
 		"save_version",
@@ -373,10 +436,6 @@ func _create_default_day_runtime() -> Dictionary:
 		"customers": {},
 		"seat_assignments": {},
 		"orders": {},
-		"completed_plates": {
-			MENU_MACKEREL: 0,
-			MENU_EGG: 0,
-		},
 		"carried_item": {
 			"kind": "",
 			"menu": "",
@@ -395,36 +454,6 @@ func _ensure_day_runtime_state() -> bool:
 	if not state.has("day_runtime") or state["day_runtime"] != day_runtime:
 		state["day_runtime"] = day_runtime
 		changed = true
-
-	var completed_value: Variant = day_runtime.get(
-		"completed_plates",
-		{}
-	)
-	if not completed_value is Dictionary:
-		completed_value = {}
-		changed = true
-	var completed_plates: Dictionary = completed_value
-	if (
-		not day_runtime.has("completed_plates")
-		or day_runtime["completed_plates"] != completed_plates
-	):
-		day_runtime["completed_plates"] = completed_plates
-		changed = true
-
-	for menu_id: String in [MENU_MACKEREL, MENU_EGG]:
-		var plate_value: Variant = completed_plates.get(menu_id, 0)
-		if (
-			not _is_integer_number(plate_value)
-			or int(plate_value) < 0
-		):
-			completed_plates[menu_id] = 0
-			changed = true
-		elif (
-			not completed_plates.has(menu_id)
-			or typeof(plate_value) != TYPE_INT
-		):
-			completed_plates[menu_id] = int(plate_value)
-			changed = true
 
 	var carried_value: Variant = day_runtime.get("carried_item", {})
 	if not carried_value is Dictionary:
@@ -455,14 +484,40 @@ func _ensure_day_runtime_state() -> bool:
 		changed = true
 
 	var normalized_count: int = int(carried_count)
+	var carried_kind_string: String = String(carried_kind)
+	var carried_menu_string: String = String(carried_menu)
 	if String(carried_kind) == "" or normalized_count == 0:
 		carried_kind = ""
 		carried_menu = ""
 		normalized_count = 0
-	elif (
-		String(carried_kind) != CARRIED_KIND_PLATE
-		or not _is_known_menu(String(carried_menu))
-	):
+	elif carried_kind_string == CARRIED_KIND_PLATE:
+		if not _is_known_menu(carried_menu_string):
+			carried_kind = ""
+			carried_menu = ""
+			normalized_count = 0
+			changed = true
+	elif carried_kind_string == CARRIED_KIND_ORDER_PREP:
+		var prep_step: String = String(
+			carried_item.get("step", "")
+		)
+		var customer_id: String = String(
+			carried_item.get("customer_id", "")
+		)
+		if (
+			carried_menu_string != MENU_MACKEREL
+			or customer_id.is_empty()
+			or prep_step not in [
+				PREP_NEED_MACKEREL,
+				PREP_NEED_RICE,
+				PREP_READY_TO_COOK,
+				PREP_COOKING,
+			]
+		):
+			carried_kind = ""
+			carried_menu = ""
+			normalized_count = 0
+			changed = true
+	else:
 		carried_kind = ""
 		carried_menu = ""
 		normalized_count = 0
@@ -526,22 +581,6 @@ func _get_ready_inventory() -> Dictionary:
 	return ready_value
 
 
-func _get_recipe(menu_id: String) -> Dictionary:
-	match menu_id:
-		MENU_MACKEREL:
-			return {
-				"rice": 1,
-				"mackerel": 1,
-			}
-		MENU_EGG:
-			return {
-				"rice": 1,
-				"egg": 1,
-			}
-		_:
-			return {}
-
-
 func _is_known_menu(menu_id: String) -> bool:
 	return menu_id == MENU_MACKEREL or menu_id == MENU_EGG
 
@@ -557,14 +596,19 @@ func _is_menu_unlocked(menu_id: String) -> bool:
 	return int(progression_value.get("egg_station_level", 0)) > 0
 
 
-func _has_recipe_ingredients(
-	ready_inventory: Dictionary,
-	recipe: Dictionary
+func _is_prep_at_step(
+	carried_item: Dictionary,
+	expected_step: String
 ) -> bool:
-	if ready_inventory.is_empty():
-		return false
-	for ingredient_id: String in recipe:
-		var required_amount: int = int(recipe[ingredient_id])
-		if int(ready_inventory.get(ingredient_id, 0)) < required_amount:
-			return false
-	return true
+	return (
+		String(carried_item.get("kind", ""))
+		== CARRIED_KIND_ORDER_PREP
+		and String(carried_item.get("menu", ""))
+		== MENU_MACKEREL
+		and int(carried_item.get("count", 0)) == 1
+		and not String(
+			carried_item.get("customer_id", "")
+		).is_empty()
+		and String(carried_item.get("step", ""))
+		== expected_step
+	)

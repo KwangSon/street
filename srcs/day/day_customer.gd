@@ -3,6 +3,10 @@ class_name DayCustomer
 
 signal reached_seat(customer_id: String)
 
+const DayCustomerOrderTargetScript: Script = preload(
+	"res://srcs/day/day_customer_order_target.gd"
+)
+
 const MOVE_SPEED: float = 160.0
 const ARRIVAL_DISTANCE: float = 4.0
 const BODY_COLOR: Color = Color("5f83a3")
@@ -14,6 +18,7 @@ var _seat_target: Vector2 = Vector2.ZERO
 var _moving_to_seat: bool = false
 var _order_bubble: Node2D
 var _order_label: Label
+var _order_target: DayCustomerOrderTarget
 
 
 func configure(
@@ -71,6 +76,10 @@ func get_seat_target() -> Vector2:
 	return _seat_target
 
 
+func get_order_target() -> DayCustomerOrderTarget:
+	return _order_target
+
+
 func _build_visual() -> void:
 	var body: Polygon2D = Polygon2D.new()
 	body.name = "Body"
@@ -123,6 +132,11 @@ func _build_visual() -> void:
 	_order_label.add_theme_font_size_override("font_size", 16)
 	_order_bubble.add_child(_order_label)
 
+	_order_target = DayCustomerOrderTargetScript.new()
+	_order_target.name = "OrderTarget"
+	_order_target.configure(_customer_id)
+	add_child(_order_target)
+
 
 func _refresh_from_state() -> void:
 	if _order_bubble == null or _customer_id.is_empty():
@@ -131,11 +145,16 @@ func _refresh_from_state() -> void:
 		_customer_id
 	)
 	var menu_id: String = String(customer.get("menu", ""))
-	var waiting_for_order: bool = (
-		String(customer.get("state", ""))
-		== GameManager.CUSTOMER_WAITING_FOR_ORDER
+	var customer_state: String = String(
+		customer.get("state", "")
 	)
-	_order_bubble.visible = waiting_for_order
-	_order_label.text = "고등어" if (
-		menu_id == GameManager.MENU_MACKEREL
-	) else menu_id
+	_order_bubble.visible = customer_state in [
+		GameManager.CUSTOMER_WAITING_FOR_ORDER,
+		GameManager.CUSTOMER_WAITING_FOR_FOOD,
+	]
+	if customer_state == GameManager.CUSTOMER_WAITING_FOR_FOOD:
+		_order_label.text = "조리 중"
+	else:
+		_order_label.text = "고등어" if (
+			menu_id == GameManager.MENU_MACKEREL
+		) else menu_id

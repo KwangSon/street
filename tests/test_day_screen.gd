@@ -74,7 +74,7 @@ func test_initial_customer_reserves_seat_and_shows_order() -> void:
 	)
 
 
-func test_player_approach_starts_mackerel_crafting() -> void:
+func test_station_approach_without_order_does_not_start_crafting() -> void:
 	var screen: DayScreen = await _create_screen()
 	var station: MackerelStation = screen.get_mackerel_station()
 	screen.get_player().position = Vector2(
@@ -84,40 +84,84 @@ func test_player_approach_starts_mackerel_crafting() -> void:
 
 	await wait_physics_frames(2)
 
-	assert_eq(
+	assert_ne(
 		screen.get_interaction_controller().get_current_target(),
 		station
 	)
-	assert_true(station.is_crafting_reserved())
-	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 19)
+	assert_false(station.is_crafting_reserved())
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
 	assert_eq(
 		GameManager.state["inventory"]["ready"]["mackerel"],
-		19
+		20
 	)
 	assert_eq(
 		screen.get_node(
 			"FixedUI/HUD/InventoryLabel"
 		).text,
-		"밥 19  |  고등어 19"
+		"밥 20  |  고등어 20"
 	)
 
 
-func test_tapping_mackerel_station_walks_into_interaction_range() -> void:
+func test_order_mackerel_rice_station_sequence_starts_crafting() -> void:
 	var screen: DayScreen = await _create_screen()
-	var station: MackerelStation = screen.get_mackerel_station()
-
-	assert_true(
-		screen.request_player_move_to_world(station.position)
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
 	)
-	await wait_physics_frames(180)
+	var customer: DayCustomer = customer_manager.get_customer(
+		"customer_1"
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+
+	screen.get_player().position = customer.position
+	await wait_physics_frames(2)
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_MACKEREL
+	)
+
+	var ingredient_box: DayPreparationSource = (
+		screen.get_ingredient_box()
+	)
+	screen.get_player().position = (
+		ingredient_box.position + Vector2(0.0, 80.0)
+	)
+	await wait_physics_frames(2)
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_RICE
+	)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		19
+	)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
+
+	var rice_pot: DayPreparationSource = screen.get_rice_pot()
+	screen.get_player().position = (
+		rice_pot.position + Vector2(0.0, 80.0)
+	)
+	await wait_physics_frames(2)
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_READY_TO_COOK
+	)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 19)
+
+	var station: MackerelStation = screen.get_mackerel_station()
+	screen.get_player().position = (
+		station.position + Vector2(0.0, 80.0)
+	)
+	await wait_physics_frames(2)
 
 	assert_eq(
 		screen.get_interaction_controller().get_current_target(),
 		station
 	)
-	assert_lt(
-		GameManager.state["inventory"]["ready"]["mackerel"],
-		20
+	assert_true(station.is_crafting_reserved())
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_COOKING
 	)
 
 

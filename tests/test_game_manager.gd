@@ -19,10 +19,6 @@ func test_default_state_starts_first_day_service() -> void:
 	assert_eq(state["currency"], 0)
 	assert_eq(state["inventory"]["ready"]["rice"], 20)
 	assert_eq(state["inventory"]["ready"]["mackerel"], 20)
-	assert_eq(
-		state["day_runtime"]["completed_plates"]["mackerel"],
-		0
-	)
 	assert_eq(state["day_runtime"]["carried_item"]["count"], 0)
 	assert_true(state["day_runtime"]["customers"].is_empty())
 	assert_true(state["day_runtime"]["seat_assignments"].is_empty())
@@ -58,73 +54,90 @@ func test_apply_loaded_state_adds_missing_day_runtime() -> void:
 	source_state["future_data"] = {"keep": true}
 
 	assert_true(GameManager.apply_loaded_game_state(source_state))
-	assert_eq(
-		GameManager.state["day_runtime"]["completed_plates"][
-			GameManager.MENU_MACKEREL
-		],
-		0
-	)
+	assert_true(GameManager.state["day_runtime"]["orders"].is_empty())
 	assert_true(GameManager.state["future_data"]["keep"])
 
 
-func test_mackerel_recipe_consumes_rice_and_mackerel_atomically() -> void:
+func test_order_requires_mackerel_then_rice_before_crafting() -> void:
 	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
 	var ready_inventory: Dictionary = (
 		GameManager.state["inventory"]["ready"]
 	)
-	ready_inventory["mackerel"] = 0
 
 	assert_false(
-		GameManager.try_consume_ready_ingredients(
-			GameManager.MENU_MACKEREL
-		)
+		GameManager.try_collect_mackerel_for_order()
 	)
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_MACKEREL
+	)
+	assert_false(GameManager.try_collect_rice_for_order())
+
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_eq(ready_inventory["mackerel"], 19)
 	assert_eq(ready_inventory["rice"], 20)
-	assert_eq(ready_inventory["mackerel"], 0)
-
-	ready_inventory["mackerel"] = 1
-	assert_true(
-		GameManager.try_consume_ready_ingredients(
-			GameManager.MENU_MACKEREL
-		)
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_RICE
 	)
+	assert_true(GameManager.try_collect_rice_for_order())
 	assert_eq(ready_inventory["rice"], 19)
-	assert_eq(ready_inventory["mackerel"], 0)
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_READY_TO_COOK
+	)
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_eq(
+		GameManager.get_carried_item()["kind"],
+		GameManager.CARRIED_KIND_PLATE
+	)
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_READY_TO_SERVE
+	)
 
 
-func test_completed_mackerel_plate_can_be_carried_once() -> void:
+func test_missing_rice_does_not_consume_mackerel() -> void:
 	GameManager.state = GameManager.create_default_game_state()
-	GameManager.add_completed_plate(GameManager.MENU_MACKEREL, 2)
-
+	var customer_id: String = GameManager.create_day_customer()
 	assert_true(
-		GameManager.try_take_completed_plate(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
 			GameManager.MENU_MACKEREL
 		)
 	)
-	assert_eq(
-		GameManager.get_completed_plate_count(
-			GameManager.MENU_MACKEREL
-		),
-		1
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	var ready_inventory: Dictionary = (
+		GameManager.state["inventory"]["ready"]
 	)
+	ready_inventory["rice"] = 0
+
+	assert_false(GameManager.try_collect_mackerel_for_order())
+	assert_eq(ready_inventory["mackerel"], 20)
 	assert_eq(
-		GameManager.get_carried_item(),
-		{
-			"kind": GameManager.CARRIED_KIND_PLATE,
-			"menu": GameManager.MENU_MACKEREL,
-			"count": 1,
-		}
-	)
-	assert_false(
-		GameManager.try_take_completed_plate(
-			GameManager.MENU_MACKEREL
-		)
-	)
-	assert_eq(
-		GameManager.get_completed_plate_count(
-			GameManager.MENU_MACKEREL
-		),
-		1
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_MACKEREL
 	)
 
 

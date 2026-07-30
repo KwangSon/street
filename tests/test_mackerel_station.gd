@@ -16,8 +16,40 @@ func after_each() -> void:
 	GameManager.state = {}
 
 
-func test_entering_station_reserves_both_ingredients() -> void:
+func test_station_does_not_craft_without_order_and_collected_food() -> void:
 	var fixture: Dictionary = await _create_fixture()
+	var station: MackerelStation = fixture["station"]
+	var player: DayPlayer = fixture["player"]
+
+	station.interaction_entered(player)
+
+	assert_false(station.is_crafting_reserved())
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		20
+	)
+
+
+func test_station_rejects_order_before_mackerel_and_rice() -> void:
+	var customer_id: String = _create_waiting_order()
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	var fixture: Dictionary = await _create_fixture()
+	var station: MackerelStation = fixture["station"]
+	var player: DayPlayer = fixture["player"]
+
+	station.interaction_entered(player)
+
+	assert_false(station.is_crafting_reserved())
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_NEED_MACKEREL
+	)
+
+
+func test_collected_mackerel_and_rice_start_single_craft() -> void:
+	var customer_id: String = _prepare_order_for_cooking()
+	var fixture: Dictionary = await _create_fixture(0.1)
 	var station: MackerelStation = fixture["station"]
 	var player: DayPlayer = fixture["player"]
 
@@ -25,8 +57,8 @@ func test_entering_station_reserves_both_ingredients() -> void:
 
 	assert_true(station.is_crafting_reserved())
 	assert_eq(
-		station.get_station_state(),
-		MackerelStation.StationState.CRAFTING
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_COOKING
 	)
 	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 19)
 	assert_eq(
@@ -34,39 +66,25 @@ func test_entering_station_reserves_both_ingredients() -> void:
 		19
 	)
 
+	station.interaction_tick(player, 0.11)
 
-func test_crafting_twenty_plates_never_over_consumes() -> void:
-	var fixture: Dictionary = await _create_fixture(0.01)
-	var station: MackerelStation = fixture["station"]
-	var player: DayPlayer = fixture["player"]
-
-	station.interaction_entered(player)
-	station.interaction_tick(player, 0.21)
-
-	assert_eq(
-		GameManager.get_completed_plate_count(
-			GameManager.MENU_MACKEREL
-		),
-		20
-	)
-	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 0)
-	assert_eq(
-		GameManager.state["inventory"]["ready"]["mackerel"],
-		0
-	)
 	assert_false(station.is_crafting_reserved())
 	assert_eq(
-		station.get_station_state(),
-		MackerelStation.StationState.READY
+		GameManager.get_carried_item()["kind"],
+		GameManager.CARRIED_KIND_PLATE
+	)
+	assert_eq(
+		GameManager.get_carried_item()["customer_id"],
+		customer_id
+	)
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_READY_TO_SERVE
 	)
 
 
-func test_leaving_pauses_and_reentering_resumes_reserved_craft() -> void:
-	var ready_inventory: Dictionary = (
-		GameManager.state["inventory"]["ready"]
-	)
-	ready_inventory["rice"] = 1
-	ready_inventory["mackerel"] = 1
+func test_leaving_pauses_and_reentering_resumes_same_order() -> void:
+	var customer_id: String = _prepare_order_for_cooking()
 	var fixture: Dictionary = await _create_fixture(0.1)
 	var station: MackerelStation = fixture["station"]
 	var player: DayPlayer = fixture["player"]
@@ -87,59 +105,40 @@ func test_leaving_pauses_and_reentering_resumes_reserved_craft() -> void:
 	station.interaction_entered(player)
 	station.interaction_tick(player, 0.07)
 
-	assert_eq(
-		GameManager.get_completed_plate_count(
-			GameManager.MENU_MACKEREL
-		),
-		1
-	)
 	assert_false(station.is_crafting_reserved())
-	assert_eq(ready_inventory["rice"], 0)
-	assert_eq(ready_inventory["mackerel"], 0)
-
-
-func test_ready_plate_is_picked_up_before_new_craft() -> void:
-	GameManager.add_completed_plate(GameManager.MENU_MACKEREL)
-	var fixture: Dictionary = await _create_fixture()
-	var station: MackerelStation = fixture["station"]
-	var player: DayPlayer = fixture["player"]
-
-	station.interaction_entered(player)
-
 	assert_eq(
-		GameManager.get_completed_plate_count(
-			GameManager.MENU_MACKEREL
-		),
-		0
+		GameManager.get_carried_item()["customer_id"],
+		customer_id
 	)
 	assert_eq(
-		player.get_carried_item()["menu"],
-		GameManager.MENU_MACKEREL
+		GameManager.get_carried_item()["kind"],
+		GameManager.CARRIED_KIND_PLATE
 	)
-	assert_true(player.get_node("CarriedItem").visible)
-	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
-	assert_false(station.is_crafting_reserved())
 
 
-func test_carrying_plate_prevents_new_craft() -> void:
-	GameManager.add_completed_plate(GameManager.MENU_MACKEREL)
+func _create_waiting_order() -> String:
+	var customer_id: String = GameManager.create_day_customer()
 	assert_true(
-		GameManager.try_take_completed_plate(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
 			GameManager.MENU_MACKEREL
 		)
 	)
-	var fixture: Dictionary = await _create_fixture()
-	var station: MackerelStation = fixture["station"]
-	var player: DayPlayer = fixture["player"]
+	return customer_id
 
-	station.interaction_entered(player)
 
-	assert_false(station.is_crafting_reserved())
-	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
-	assert_eq(
-		GameManager.state["inventory"]["ready"]["mackerel"],
-		20
-	)
+func _prepare_order_for_cooking() -> String:
+	var customer_id: String = _create_waiting_order()
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	return customer_id
 
 
 func _create_fixture(

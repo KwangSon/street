@@ -19,6 +19,9 @@ var move_speed: float = DEFAULT_MOVE_SPEED
 var _facing_direction: StringName = FACING_DOWN
 var _direction_marker: Polygon2D
 var _carried_item_visual: Node2D
+var _carried_plate_visual: Polygon2D
+var _carried_mackerel_visual: Polygon2D
+var _carried_item_label: Label
 var _carried_item: Dictionary = {}
 var _path: PackedVector2Array = PackedVector2Array()
 var _path_index: int = 0
@@ -178,10 +181,10 @@ func _build_placeholder_visual() -> void:
 	_carried_item_visual.z_index = 2
 	add_child(_carried_item_visual)
 
-	var plate: Polygon2D = Polygon2D.new()
-	plate.name = "Plate"
-	plate.color = CARRIED_PLATE_COLOR
-	plate.polygon = PackedVector2Array([
+	_carried_plate_visual = Polygon2D.new()
+	_carried_plate_visual.name = "Plate"
+	_carried_plate_visual.color = CARRIED_PLATE_COLOR
+	_carried_plate_visual.polygon = PackedVector2Array([
 		Vector2(-28.0, -8.0),
 		Vector2(28.0, -8.0),
 		Vector2(34.0, 0.0),
@@ -189,12 +192,12 @@ func _build_placeholder_visual() -> void:
 		Vector2(-28.0, 8.0),
 		Vector2(-34.0, 0.0),
 	])
-	_carried_item_visual.add_child(plate)
+	_carried_item_visual.add_child(_carried_plate_visual)
 
-	var mackerel: Polygon2D = Polygon2D.new()
-	mackerel.name = "Mackerel"
-	mackerel.color = CARRIED_MACKEREL_COLOR
-	mackerel.polygon = PackedVector2Array([
+	_carried_mackerel_visual = Polygon2D.new()
+	_carried_mackerel_visual.name = "Mackerel"
+	_carried_mackerel_visual.color = CARRIED_MACKEREL_COLOR
+	_carried_mackerel_visual.polygon = PackedVector2Array([
 		Vector2(-21.0, 0.0),
 		Vector2(-10.0, -8.0),
 		Vector2(15.0, -6.0),
@@ -202,7 +205,24 @@ func _build_placeholder_visual() -> void:
 		Vector2(15.0, 6.0),
 		Vector2(-10.0, 8.0),
 	])
-	_carried_item_visual.add_child(mackerel)
+	_carried_item_visual.add_child(_carried_mackerel_visual)
+
+	_carried_item_label = Label.new()
+	_carried_item_label.name = "ItemLabel"
+	_carried_item_label.position = Vector2(-55.0, -34.0)
+	_carried_item_label.size = Vector2(110.0, 24.0)
+	_carried_item_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+	_carried_item_label.add_theme_color_override(
+		"font_color",
+		Color("35291f")
+	)
+	_carried_item_label.add_theme_font_size_override(
+		"font_size",
+		14
+	)
+	_carried_item_visual.add_child(_carried_item_label)
 	_refresh_carried_item_visual()
 
 
@@ -224,10 +244,34 @@ func _update_direction_marker() -> void:
 func _refresh_carried_item_visual() -> void:
 	if _carried_item_visual == null:
 		return
-	_carried_item_visual.visible = (
-		String(_carried_item.get("kind", ""))
-		== GameManager.CARRIED_KIND_PLATE
+	var carried_kind: String = String(
+		_carried_item.get("kind", "")
+	)
+	var has_item: bool = (
+		int(_carried_item.get("count", 0)) > 0
 		and String(_carried_item.get("menu", ""))
 		== GameManager.MENU_MACKEREL
-		and int(_carried_item.get("count", 0)) > 0
 	)
+	_carried_item_visual.visible = has_item
+	if not has_item:
+		return
+
+	var is_plate: bool = (
+		carried_kind == GameManager.CARRIED_KIND_PLATE
+	)
+	var prep_step: String = String(
+		_carried_item.get("step", "")
+	)
+	_carried_plate_visual.visible = is_plate
+	_carried_mackerel_visual.visible = (
+		is_plate
+		or prep_step != GameManager.PREP_NEED_MACKEREL
+	)
+	if is_plate:
+		_carried_item_label.text = "고등어 접시"
+	elif prep_step == GameManager.PREP_NEED_MACKEREL:
+		_carried_item_label.text = "주문"
+	elif prep_step == GameManager.PREP_NEED_RICE:
+		_carried_item_label.text = "고등어"
+	else:
+		_carried_item_label.text = "고등어 + 밥"
