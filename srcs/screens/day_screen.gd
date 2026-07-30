@@ -21,6 +21,9 @@ const DayCustomerManagerScript: Script = preload(
 const DayPreparationSourceScript: Script = preload(
 	"res://srcs/day/day_preparation_source.gd"
 )
+const DayUpgradePadScript: Script = preload(
+	"res://srcs/day/day_upgrade_pad.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -113,7 +116,9 @@ var _mackerel_station: MackerelStation
 var _customer_manager: DayCustomerManager
 var _ingredient_box: DayPreparationSource
 var _rice_pot: DayPreparationSource
+var _mackerel_upgrade_pad: DayUpgradePad
 var _inventory_label: Label
+var _currency_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -209,6 +214,10 @@ func get_rice_pot() -> DayPreparationSource:
 	return _rice_pot
 
 
+func get_mackerel_upgrade_pad() -> DayUpgradePad:
+	return _mackerel_upgrade_pad
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -247,6 +256,11 @@ func _build_world() -> void:
 	for facility: Dictionary in FACILITIES:
 		_add_facility(facility)
 
+	_mackerel_upgrade_pad = DayUpgradePadScript.new()
+	_mackerel_upgrade_pad.name = "MackerelUpgradePad"
+	_mackerel_upgrade_pad.position = Vector2(540.0, 465.0)
+	_world.add_child(_mackerel_upgrade_pad)
+
 	_player = DayPlayerScript.new()
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
 	_player.position = PLAYER_START_POSITION
@@ -259,6 +273,9 @@ func _build_world() -> void:
 	_interaction_controller.register_interactable(_mackerel_station)
 	_interaction_controller.register_interactable(_ingredient_box)
 	_interaction_controller.register_interactable(_rice_pot)
+	_interaction_controller.register_interactable(
+		_mackerel_upgrade_pad
+	)
 	_world.add_child(_interaction_controller)
 
 	_customer_manager = DayCustomerManagerScript.new()
@@ -515,7 +532,7 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 		Rect2(270.0, 14.0, 180.0, 42.0),
 		HORIZONTAL_ALIGNMENT_CENTER
 	)
-	_add_hud_label(
+	_currency_label = _add_hud_label(
 		hud,
 		"CurrencyLabel",
 		"%d문" % currency,
@@ -627,6 +644,7 @@ func _on_viewport_size_changed() -> void:
 
 func _on_game_state_changed() -> void:
 	_refresh_inventory_hud()
+	_refresh_currency_hud()
 	if _player != null:
 		_player.set_carried_item(GameManager.get_carried_item())
 
@@ -645,6 +663,14 @@ func _refresh_inventory_hud() -> void:
 		int(ready_inventory.get("rice", 0)),
 		int(ready_inventory.get("mackerel", 0)),
 	]
+
+
+func _refresh_currency_hud() -> void:
+	if _currency_label == null:
+		return
+	_currency_label.text = "%d문" % int(
+		GameManager.state.get("currency", 0)
+	)
 
 
 func _get_ready_inventory() -> Dictionary:

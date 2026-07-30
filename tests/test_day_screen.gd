@@ -35,8 +35,50 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_node("World/InteractionController"))
 	assert_not_null(screen.get_node("World/CustomerManager"))
 	assert_not_null(screen.get_mackerel_station())
+	assert_not_null(screen.get_mackerel_upgrade_pad())
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
+
+
+func test_upgrade_pad_blocks_purchase_when_currency_is_insufficient() -> void:
+	GameManager.state["currency"] = 11
+	var screen: DayScreen = await _create_screen()
+	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
+	screen.get_player().position = pad.position
+
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_mackerel_station_level(), 1)
+	assert_eq(GameManager.state["currency"], 11)
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"12문 필요"
+	)
+
+
+func test_upgrade_pad_buys_level_two_and_refreshes_screen() -> void:
+	GameManager.state["currency"] = 12
+	var screen: DayScreen = await _create_screen()
+	var pad: DayUpgradePad = screen.get_mackerel_upgrade_pad()
+	screen.get_player().position = pad.position
+
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_mackerel_station_level(), 2)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(screen.get_mackerel_station().craft_duration, 3.0)
+	assert_eq(
+		screen.get_mackerel_station().get_node("Label").text,
+		"고등어 조리대 Lv.2"
+	)
+	assert_eq(
+		screen.get_node("FixedUI/HUD/CurrencyLabel").text,
+		"0문"
+	)
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"판매 7문"
+	)
 
 
 func test_initial_customer_reserves_seat_and_shows_order() -> void:

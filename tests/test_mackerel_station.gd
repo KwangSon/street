@@ -151,6 +151,7 @@ func _create_fixture(
 	fixture_root.add_child(player)
 
 	var station: MackerelStation = MackerelStationScript.new()
+	station.use_game_manager_tuning = false
 	station.craft_duration = craft_duration
 	fixture_root.add_child(station)
 	await wait_process_frames(1)

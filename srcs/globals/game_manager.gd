@@ -30,6 +30,34 @@ const PAYMENT_WAITING: String = "waiting"
 const PAYMENT_COLLECTED: String = "collected"
 
 const MACKEREL_PRICE: int = 6
+const MACKEREL_STATION_P0_MAX_LEVEL: int = 2
+const MACKEREL_STATION_LEVELS: Dictionary = {
+	1: {
+		"craft_duration": 3.2,
+		"sale_price": 6,
+		"upgrade_cost": 12,
+	},
+	2: {
+		"craft_duration": 3.0,
+		"sale_price": 7,
+		"upgrade_cost": 28,
+	},
+	3: {
+		"craft_duration": 2.7,
+		"sale_price": 8,
+		"upgrade_cost": 60,
+	},
+	4: {
+		"craft_duration": 2.4,
+		"sale_price": 10,
+		"upgrade_cost": 120,
+	},
+	5: {
+		"craft_duration": 2.1,
+		"sale_price": 12,
+		"upgrade_cost": 0,
+	},
+}
 const MAX_CUSTOMER_QUEUE: int = 3
 
 const PREP_NEED_MACKEREL: String = "need_mackerel"
@@ -263,6 +291,7 @@ func mark_customer_seated(
 		"customer_id": customer_id,
 		"seat_id": seat_id,
 		"menu": menu_id,
+		"price": get_mackerel_sale_price(),
 		"status": ORDER_WAITING,
 	}
 	state_changed.emit()
@@ -499,9 +528,12 @@ func mark_customer_finished_eating(customer_id: String) -> bool:
 	order["status"] = ORDER_WAITING_FOR_PAYMENT
 	customer["state"] = CUSTOMER_WAITING_FOR_PAYMENT
 	var payments: Dictionary = day_runtime["payments"]
+	var sale_price: int = int(
+		order.get("price", MACKEREL_PRICE)
+	)
 	payments[customer_id] = {
 		"customer_id": customer_id,
-		"amount": MACKEREL_PRICE,
+		"amount": sale_price,
 		"status": PAYMENT_WAITING,
 	}
 	state_changed.emit()
@@ -583,6 +615,60 @@ func get_customer_payment(customer_id: String) -> Dictionary:
 	if not payments.has(customer_id):
 		return {}
 	return Dictionary(payments[customer_id]).duplicate(true)
+
+
+func get_mackerel_station_level() -> int:
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return 1
+	return clampi(
+		int(progression_value.get("mackerel_station_level", 1)),
+		1,
+		MACKEREL_STATION_LEVELS.size()
+	)
+
+
+func get_mackerel_craft_duration() -> float:
+	var tuning: Dictionary = MACKEREL_STATION_LEVELS[
+		get_mackerel_station_level()
+	]
+	return float(tuning["craft_duration"])
+
+
+func get_mackerel_sale_price() -> int:
+	var tuning: Dictionary = MACKEREL_STATION_LEVELS[
+		get_mackerel_station_level()
+	]
+	return int(tuning["sale_price"])
+
+
+func get_mackerel_upgrade_cost() -> int:
+	var level: int = get_mackerel_station_level()
+	if level >= MACKEREL_STATION_P0_MAX_LEVEL:
+		return 0
+	var tuning: Dictionary = MACKEREL_STATION_LEVELS[level]
+	return int(tuning["upgrade_cost"])
+
+
+func try_purchase_mackerel_station_upgrade() -> bool:
+	var current_level: int = get_mackerel_station_level()
+	if current_level >= MACKEREL_STATION_P0_MAX_LEVEL:
+		return false
+	if not state.has("progression"):
+		return false
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return false
+	var upgrade_cost: int = get_mackerel_upgrade_cost()
+	var currency: int = int(state.get("currency", 0))
+	if upgrade_cost <= 0 or currency < upgrade_cost:
+		return false
+
+	var progression: Dictionary = progression_value
+	state["currency"] = currency - upgrade_cost
+	progression["mackerel_station_level"] = current_level + 1
+	state_changed.emit()
+	return true
 
 
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:

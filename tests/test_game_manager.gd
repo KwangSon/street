@@ -143,6 +143,54 @@ func test_missing_rice_does_not_consume_mackerel() -> void:
 	)
 
 
+func test_mackerel_station_level_two_costs_twelve_once() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 11
+
+	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_eq(GameManager.get_mackerel_station_level(), 1)
+	assert_eq(GameManager.state["currency"], 11)
+
+	GameManager.state["currency"] = 12
+	assert_true(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_eq(GameManager.get_mackerel_station_level(), 2)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.get_mackerel_craft_duration(), 3.0)
+	assert_eq(GameManager.get_mackerel_sale_price(), 7)
+	assert_eq(GameManager.get_mackerel_upgrade_cost(), 0)
+
+	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_eq(GameManager.get_mackerel_station_level(), 2)
+	assert_eq(GameManager.state["currency"], 0)
+
+
+func test_upgraded_station_order_pays_seven() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 12
+	assert_true(GameManager.try_purchase_mackerel_station_upgrade())
+	var customer_id: String = _create_ready_plate_order()
+
+	assert_eq(
+		GameManager.get_day_order(customer_id)["price"],
+		7
+	)
+	assert_true(GameManager.try_serve_order(customer_id))
+	assert_true(GameManager.mark_customer_finished_eating(customer_id))
+	assert_eq(GameManager.get_customer_payment(customer_id)["amount"], 7)
+	assert_true(GameManager.collect_customer_payment(customer_id))
+	assert_eq(GameManager.state["currency"], 7)
+	assert_eq(GameManager.state["day_stats"]["revenue"], 7)
+
+
+func test_upgrade_rejects_missing_progression_data() -> void:
+	GameManager.state = {
+		"currency": 12,
+	}
+
+	assert_false(GameManager.try_purchase_mackerel_station_upgrade())
+	assert_eq(GameManager.state["currency"], 12)
+
+
 func test_only_matching_customer_receives_finished_plate() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var customer_id: String = _create_ready_plate_order()

@@ -14,17 +14,18 @@
 
 ## 현재 구현 상태
 
-현재 저장소에는 실행·저장 로드, 낮 화면 이동과 손님의 주문→제작→서빙→식사→결제→퇴장 반복 흐름을 담당하는 코드 기반이 구현돼 있다.
+현재 저장소에는 실행·저장 로드, 낮 화면 이동, 손님의 주문→제작→서빙→식사→결제→퇴장 반복 흐름과 첫 조리대 강화까지 담당하는 코드 기반이 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
 - `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
-- `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동, 드래그 카메라와 고등어 조리대 연결
+- `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동, 드래그 카메라와 낮 영업 시설 연결
 - `srcs/day/day_customer.gd`: 손님의 좌석 이동과 주문 말풍선
 - `srcs/day/day_customer_manager.gd`: 손님 생성, 좌석 예약, 최대 3명 FIFO 대기열과 고등어 주문 생성
 - `srcs/day/day_customer_order_target.gd`: 손님 접근 시 주문 한 건 수령
 - `srcs/day/day_preparation_source.gd`: 고등어 상자와 밥통의 순차 재료 수령
 - `srcs/day/day_payment.gd`: 좌석 옆 엽전 표시와 접근 회수
+- `srcs/day/day_upgrade_pad.gd`: 1초 체류 결제로 고등어 조리대 Lv.2를 구매하는 패드
 - `srcs/day/day_interaction_controller.gd`: 접근 대상의 우선순위·거리 선택과 진입·이탈 처리
 - `srcs/day/mackerel_station.gd`: 준비가 끝난 주문의 제작 진행, 일시정지와 접시 완성
 - `srcs/day/day_navigation.gd`: 시설을 우회하는 40px A* 이동 경로
@@ -36,7 +37,8 @@
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
 - 좌석 1이 차 있으면 3초 간격으로 최대 3명이 입구에 대기한다. 결제 손님이 퇴장하면 대기열의 첫 손님이 좌석으로 이동하고 새 손님이 맨 뒤를 채운다.
 - 낮 영업의 고등어 1접시는 `손님 주문 수령 → 고등어 상자 → 밥통 → 고등어 조리대` 순서로 만든다. 조리대에 바로 접근하면 제작되지 않는다.
-- 새벽 화면과 손님·서빙·결제는 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
+- 12문을 모아 구매 패드에 1초 머물면 고등어 조리대가 Lv.2가 된다. 제작시간은 3.2초에서 3.0초로 줄고, 강화 뒤 생성된 주문의 판매가는 6문에서 7문으로 오른다.
+- 새벽 화면, 좌석 2, 점원, 영업 종료와 정산은 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
 
 ## 개발 원칙
 
@@ -69,6 +71,7 @@ street/
 │   │   ├── day_payment.gd
 │   │   ├── day_player.gd
 │   │   ├── day_preparation_source.gd
+│   │   ├── day_upgrade_pad.gd
 │   │   └── mackerel_station.gd
 │   ├── globals/
 │   │   ├── game_manager.gd

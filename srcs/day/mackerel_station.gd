@@ -18,6 +18,7 @@ const HIGHLIGHT_COLOR: Color = Color("f2c94c")
 const STATUS_COLOR: Color = Color("35291f")
 
 var craft_duration: float = DEFAULT_CRAFT_DURATION
+var use_game_manager_tuning: bool = true
 var facility_size: Vector2 = Vector2(180.0, 96.0)
 var base_color: Color = Color("7197ad")
 
@@ -30,9 +31,12 @@ var _player_active: bool = false
 var _highlight: Line2D
 var _progress_bar: ProgressBar
 var _status_label: Label
+var _title_label: Label
 
 
 func _ready() -> void:
+	if use_game_manager_tuning:
+		craft_duration = GameManager.get_mackerel_craft_duration()
 	_build_visual()
 	if not GameManager.state_changed.is_connected(
 		_on_game_state_changed
@@ -170,6 +174,11 @@ func _refresh_visual() -> void:
 	_station_state = _resolve_station_state()
 	if _progress_bar == null:
 		return
+	if use_game_manager_tuning and not _ingredients_reserved:
+		craft_duration = GameManager.get_mackerel_craft_duration()
+	_title_label.text = "고등어 조리대 Lv.%d" % (
+		GameManager.get_mackerel_station_level()
+	)
 
 	var safe_duration: float = maxf(craft_duration, 0.001)
 	_progress_bar.value = clampf(
@@ -224,16 +233,18 @@ func _build_visual() -> void:
 	body.polygon = _rectangle_polygon(facility_size)
 	add_child(body)
 
-	var label: Label = Label.new()
-	label.name = "Label"
-	label.position = -facility_size * 0.5
-	label.size = facility_size
-	label.text = "고등어 조리대"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_color", STATUS_COLOR)
-	label.add_theme_font_size_override("font_size", 18)
-	add_child(label)
+	_title_label = Label.new()
+	_title_label.name = "Label"
+	_title_label.position = -facility_size * 0.5
+	_title_label.size = facility_size
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_title_label.add_theme_color_override(
+		"font_color",
+		STATUS_COLOR
+	)
+	_title_label.add_theme_font_size_override("font_size", 18)
+	add_child(_title_label)
 
 	_highlight = Line2D.new()
 	_highlight.name = "InteractionHighlight"
