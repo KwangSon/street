@@ -16,23 +16,38 @@ const TEXT_COLOR: Color = Color("35291f")
 var _server_state: ServerState = ServerState.IDLE
 var _customer_id: String = ""
 var _station_position: Vector2 = Vector2.ZERO
+var _station_positions: Dictionary = {}
 var _customer_manager: DayCustomerManager
 var _navigation: DayNavigation
 var _path: PackedVector2Array = PackedVector2Array()
 var _path_index: int = 0
 var _plate_visual: Node2D
+var _topping_visual: Polygon2D
 
 
 func configure(
 	start_position: Vector2,
-	station_position: Vector2,
+	station_positions: Dictionary,
 	customer_manager: DayCustomerManager,
 	navigation: DayNavigation
 ) -> void:
 	position = start_position
-	_station_position = station_position
+	_station_positions = station_positions.duplicate(true)
+	_station_position = Vector2(
+		_station_positions.get(
+			GameManager.MENU_MACKEREL,
+			Vector2.ZERO
+		)
+	)
 	_customer_manager = customer_manager
 	_navigation = navigation
+
+
+func set_station_position(
+	menu_id: String,
+	station_position: Vector2
+) -> void:
+	_station_positions[menu_id] = station_position
 
 
 func _ready() -> void:
@@ -77,6 +92,11 @@ func _find_next_plate() -> void:
 	if reserved_customer_id.is_empty():
 		return
 	_customer_id = reserved_customer_id
+	var station_item: Dictionary = GameManager.get_station_item()
+	var menu_id: String = String(station_item.get("menu", ""))
+	_station_position = Vector2(
+		_station_positions.get(menu_id, _station_position)
+	)
 	if not _start_path(_station_position):
 		GameManager.cancel_server_plate_delivery(_customer_id)
 		_reset_to_idle()
@@ -187,17 +207,27 @@ func _build_visual() -> void:
 	])
 	_plate_visual.add_child(plate)
 
-	var topping: Polygon2D = Polygon2D.new()
-	topping.color = Color("6f8fa3")
-	topping.polygon = PackedVector2Array([
+	_topping_visual = Polygon2D.new()
+	_topping_visual.color = Color("6f8fa3")
+	_topping_visual.polygon = PackedVector2Array([
 		Vector2(-13.0, -11.0),
 		Vector2(13.0, -11.0),
 		Vector2(16.0, 1.0),
 		Vector2(-16.0, 1.0),
 	])
-	_plate_visual.add_child(topping)
+	_plate_visual.add_child(_topping_visual)
 
 
 func _refresh_visual() -> void:
 	if _plate_visual != null:
 		_plate_visual.visible = is_carrying_plate()
+	if _topping_visual != null:
+		var carried_item: Dictionary = (
+			GameManager.get_server_carried_item()
+		)
+		_topping_visual.color = (
+			Color("e2bf4f")
+			if String(carried_item.get("menu", ""))
+			== GameManager.MENU_EGG
+			else Color("6f8fa3")
+		)

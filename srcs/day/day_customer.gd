@@ -214,9 +214,9 @@ func _refresh_from_state() -> void:
 		GameManager.CUSTOMER_WAITING_FOR_PAYMENT:
 			_order_label.text = "계산"
 		_:
-			_order_label.text = "고등어" if (
-				menu_id == GameManager.MENU_MACKEREL
-			) else menu_id
+			_order_label.text = GameManager.get_menu_display_name(
+				menu_id
+			)
 
 
 func _move_to_seat(delta: float) -> void:

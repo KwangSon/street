@@ -204,9 +204,20 @@ func _promote_next_customer() -> void:
 
 
 func _on_customer_reached_seat(customer_id: String) -> void:
+	var menu_id: String = GameManager.choose_menu_for_customer(
+		customer_id
+	)
+	if menu_id.is_empty():
+		if GameManager.dismiss_unordered_customer(customer_id):
+			var departing_customer: DayCustomer = get_customer(
+				customer_id
+			)
+			if departing_customer != null:
+				departing_customer.start_leaving(_entrance_position)
+		return
 	if not GameManager.mark_customer_seated(
 		customer_id,
-		GameManager.MENU_MACKEREL
+		menu_id
 	):
 		push_error(
 			"Could not create order for seated customer: %s"

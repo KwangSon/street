@@ -3,6 +3,7 @@ class_name DayPreparationSource
 
 enum SourceKind {
 	MACKEREL,
+	EGG,
 	RICE,
 }
 
@@ -77,6 +78,8 @@ func get_interaction_distance_squared(
 func interaction_entered(_player: DayPlayer) -> void:
 	if source_kind == SourceKind.MACKEREL:
 		GameManager.try_collect_mackerel_for_order()
+	elif source_kind == SourceKind.EGG:
+		GameManager.try_collect_egg_for_order()
 	else:
 		GameManager.try_collect_rice_for_order()
 
@@ -93,6 +96,8 @@ func _is_current_step() -> bool:
 	)
 	if source_kind == SourceKind.MACKEREL:
 		return current_step == GameManager.PREP_NEED_MACKEREL
+	if source_kind == SourceKind.EGG:
+		return current_step == GameManager.PREP_NEED_EGG
 	return current_step == GameManager.PREP_NEED_RICE
 
 
@@ -155,11 +160,25 @@ func _refresh_visual() -> void:
 			status_text = "고등어 완료"
 		else:
 			status_text = "주문 필요"
+	elif source_kind == SourceKind.EGG:
+		if prep_step == GameManager.PREP_NEED_EGG:
+			status_text = "계란 받기"
+		elif prep_step in [
+			GameManager.PREP_NEED_RICE,
+			GameManager.PREP_READY_TO_COOK,
+			GameManager.PREP_COOKING,
+		]:
+			status_text = "계란 완료"
+		else:
+			status_text = "주문 필요"
 	else:
 		if prep_step == GameManager.PREP_NEED_RICE:
 			status_text = "밥 받기"
 		elif prep_step == GameManager.PREP_NEED_MACKEREL:
 			status_text = "고등어 먼저"
+			status_color = BLOCKED_COLOR
+		elif prep_step == GameManager.PREP_NEED_EGG:
+			status_text = "계란 먼저"
 			status_color = BLOCKED_COLOR
 		elif prep_step in [
 			GameManager.PREP_READY_TO_COOK,

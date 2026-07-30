@@ -55,6 +55,12 @@ func is_player_in_range(
 		!= GameManager.SCREEN_DAWN
 		or String(GameManager.state.get("phase", ""))
 		!= GameManager.PHASE_PREP
+		or (
+			_material_id == GameManager.MENU_EGG
+			and not GameManager.is_menu_unlocked(
+				GameManager.MENU_EGG
+			)
+		)
 		or GameManager.get_dawn_prep_next_step(_material_id)
 		!= _step_index
 	):

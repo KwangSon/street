@@ -39,10 +39,15 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_node("World/CustomerManager"))
 	assert_not_null(screen.get_mackerel_station())
 	assert_not_null(screen.get_mackerel_upgrade_pad())
+	assert_not_null(screen.get_egg_upgrade_pad())
 	assert_not_null(screen.get_seat_purchase_pad())
 	assert_not_null(screen.get_staff_hire_pad())
+	assert_null(screen.get_egg_station())
+	assert_null(screen.get_egg_box())
 	assert_null(screen.get_server())
 	assert_null(screen.get_node_or_null("World/Seat2"))
+	assert_null(screen.get_node_or_null("World/Seat3"))
+	assert_null(screen.get_node_or_null("World/Seat4"))
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_not_null(screen.get_early_close_button())
 	assert_eq(screen.get_early_close_button().text, "조기 마감")
@@ -153,10 +158,8 @@ func test_seat_pad_installs_second_seat_and_promotes_fifo_queue() -> void:
 			"customer_5",
 		]
 	)
-	assert_string_contains(
-		pad.get_node("StatusLabel").text,
-		"동시 손님 2명"
-	)
+	assert_eq(pad.get_node("TitleLabel").text, "좌석 3 구매")
+	assert_string_contains(pad.get_node("StatusLabel").text, "Day 2")
 
 	assert_true(
 		screen.request_player_move_to_world(
@@ -180,6 +183,113 @@ func test_loaded_second_seat_exists_before_customer_spawn() -> void:
 
 	assert_not_null(screen.get_node_or_null("World/Seat2"))
 	assert_true(screen.get_customer_manager().has_seat("seat_2"))
+
+
+func test_seat_pad_installs_third_and_fourth_seats_in_order() -> void:
+	GameManager.state["day"] = 2
+	GameManager.state["progression"]["seats"] = 2
+	GameManager.state["currency"] = 215
+	var screen: DayScreen = await _create_screen()
+	var pad: DaySeatPurchasePad = screen.get_seat_purchase_pad()
+
+	screen.get_player().position = pad.position
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_unlocked_seat_count(), 3)
+	assert_eq(GameManager.state["currency"], 150)
+	assert_not_null(screen.get_node_or_null("World/Seat3"))
+	assert_true(screen.get_customer_manager().has_seat("seat_3"))
+	assert_eq(pad.get_node("TitleLabel").text, "좌석 4 구매")
+	assert_string_contains(pad.get_node("StatusLabel").text, "140문")
+
+	screen.get_player().position = Vector2(360.0, 620.0)
+	await wait_physics_frames(2)
+	screen.get_player().position = pad.position
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_unlocked_seat_count(), 4)
+	assert_eq(GameManager.state["currency"], 10)
+	assert_not_null(screen.get_node_or_null("World/Seat4"))
+	assert_true(screen.get_customer_manager().has_seat("seat_4"))
+	assert_eq(pad.get_node("TitleLabel").text, "좌석 4 설치 완료")
+	assert_string_contains(
+		pad.get_node("StatusLabel").text,
+		"동시 손님 4명"
+	)
+
+
+func test_egg_upgrade_pad_unlocks_menu_facilities_for_eighty_mon() -> void:
+	GameManager.state["day"] = 2
+	GameManager.state["currency"] = 90
+	var screen: DayScreen = await _create_screen()
+	var pad: DayUpgradePad = screen.get_egg_upgrade_pad()
+
+	assert_eq(pad.get_node("TitleLabel").text, "계란 메뉴 해금")
+	screen.get_player().position = pad.position
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.get_egg_station_level(), 1)
+	assert_eq(GameManager.state["currency"], 10)
+	assert_not_null(screen.get_egg_station())
+	assert_not_null(screen.get_egg_box())
+	assert_not_null(screen.get_node_or_null("World/EggStation"))
+	assert_not_null(screen.get_node_or_null("World/EggBox"))
+	assert_eq(pad.get_node("TitleLabel").text, "계란 조리대 Lv.2")
+	assert_string_contains(
+		screen.get_node("FixedUI/HUD/InventoryLabel").text,
+		"계란 0"
+	)
+
+
+func test_hired_server_collects_and_serves_egg_plate() -> void:
+	GameManager.state["day"] = 3
+	GameManager.state["progression"]["egg_station_level"] = 1
+	GameManager.state["progression"]["server_hired"] = true
+	GameManager.state["progression"]["server_speed_level"] = 1
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 5,
+		"mackerel": 0,
+		"egg": 5,
+	}
+	var screen: DayScreen = await _create_screen()
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+
+	assert_eq(
+		GameManager.get_day_customer("customer_1")["menu"],
+		GameManager.MENU_EGG
+	)
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+	assert_true(GameManager.try_collect_egg_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	var egg_station: MackerelStation = screen.get_egg_station()
+	egg_station.interaction_entered(screen.get_player())
+	egg_station.interaction_tick(screen.get_player(), 4.1)
+	assert_true(GameManager.has_station_item())
+	assert_eq(
+		GameManager.get_station_item()["menu"],
+		GameManager.MENU_EGG
+	)
+
+	var serving_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_day_customer(
+						"customer_1"
+					).get("state", "")
+				)
+				== GameManager.CUSTOMER_EATING
+			),
+		600
+	)
+
+	assert_lte(serving_frames, 600)
+	assert_false(GameManager.has_station_item())
+	assert_true(GameManager.get_server_carried_item().is_empty())
 
 
 func test_staff_pad_explains_operating_reserve_block() -> void:

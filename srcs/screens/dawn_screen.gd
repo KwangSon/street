@@ -33,49 +33,73 @@ const PREPARATION_STATIONS: Array[Dictionary] = [
 		"material": "rice",
 		"step": 0,
 		"label": "쌀가마",
-		"position": Vector2(90.0, 350.0),
+		"position": Vector2(90.0, 250.0),
 	},
 	{
 		"material": "rice",
 		"step": 1,
 		"label": "쌀 씻기",
-		"position": Vector2(270.0, 350.0),
+		"position": Vector2(270.0, 250.0),
 	},
 	{
 		"material": "rice",
 		"step": 2,
 		"label": "밥 짓기",
-		"position": Vector2(450.0, 350.0),
+		"position": Vector2(450.0, 250.0),
 	},
 	{
 		"material": "rice",
 		"step": 3,
 		"label": "밥통",
-		"position": Vector2(630.0, 350.0),
+		"position": Vector2(630.0, 250.0),
 	},
 	{
 		"material": "mackerel",
 		"step": 0,
 		"label": "생선 상자",
-		"position": Vector2(90.0, 700.0),
+		"position": Vector2(90.0, 520.0),
 	},
 	{
 		"material": "mackerel",
 		"step": 1,
 		"label": "세척대",
-		"position": Vector2(270.0, 700.0),
+		"position": Vector2(270.0, 520.0),
 	},
 	{
 		"material": "mackerel",
 		"step": 2,
 		"label": "손질대",
-		"position": Vector2(450.0, 700.0),
+		"position": Vector2(450.0, 520.0),
 	},
 	{
 		"material": "mackerel",
 		"step": 3,
 		"label": "얼음 상자",
-		"position": Vector2(630.0, 700.0),
+		"position": Vector2(630.0, 520.0),
+	},
+	{
+		"material": "egg",
+		"step": 0,
+		"label": "계란 바구니",
+		"position": Vector2(90.0, 790.0),
+	},
+	{
+		"material": "egg",
+		"step": 1,
+		"label": "화로 조리",
+		"position": Vector2(270.0, 790.0),
+	},
+	{
+		"material": "egg",
+		"step": 2,
+		"label": "식히기",
+		"position": Vector2(450.0, 790.0),
+	},
+	{
+		"material": "egg",
+		"step": 3,
+		"label": "계란 보관함",
+		"position": Vector2(630.0, 790.0),
 	},
 ]
 
@@ -85,6 +109,7 @@ var _player: DayPlayer
 var _interaction_controller: DayInteractionController
 var _rice_purchase_pad: DawnPurchasePad
 var _mackerel_purchase_pad: DawnPurchasePad
+var _egg_purchase_pad: DawnPurchasePad
 var _preparation_stations: Dictionary = {}
 var _title_label: Label
 var _currency_label: Label
@@ -158,6 +183,10 @@ func get_mackerel_purchase_pad() -> DawnPurchasePad:
 	return _mackerel_purchase_pad
 
 
+func get_egg_purchase_pad() -> DawnPurchasePad:
+	return _egg_purchase_pad
+
+
 func get_refund_button() -> Button:
 	return _refund_button
 
@@ -227,14 +256,20 @@ func _build_world() -> void:
 	_rice_purchase_pad = DawnPurchasePadScript.new()
 	_rice_purchase_pad.name = "RicePurchasePad"
 	_rice_purchase_pad.configure("rice")
-	_rice_purchase_pad.position = Vector2(210.0, 480.0)
+	_rice_purchase_pad.position = Vector2(125.0, 480.0)
 	_world.add_child(_rice_purchase_pad)
 
 	_mackerel_purchase_pad = DawnPurchasePadScript.new()
 	_mackerel_purchase_pad.name = "MackerelPurchasePad"
 	_mackerel_purchase_pad.configure("mackerel")
-	_mackerel_purchase_pad.position = Vector2(510.0, 480.0)
+	_mackerel_purchase_pad.position = Vector2(360.0, 480.0)
 	_world.add_child(_mackerel_purchase_pad)
+
+	_egg_purchase_pad = DawnPurchasePadScript.new()
+	_egg_purchase_pad.name = "EggPurchasePad"
+	_egg_purchase_pad.configure("egg")
+	_egg_purchase_pad.position = Vector2(595.0, 480.0)
+	_world.add_child(_egg_purchase_pad)
 
 	for station_data: Dictionary in PREPARATION_STATIONS:
 		var station: DawnPreparationStation = (
@@ -274,6 +309,7 @@ func _build_world() -> void:
 	_interaction_controller.register_interactable(
 		_mackerel_purchase_pad
 	)
+	_interaction_controller.register_interactable(_egg_purchase_pad)
 	for station_value: Variant in _preparation_stations.values():
 		_interaction_controller.register_interactable(
 			station_value as DawnPreparationStation
@@ -448,14 +484,12 @@ func _on_prepare_pressed() -> void:
 			)
 			return
 		_save_checkpoint()
-		_status_label.text = (
-			"쌀과 고등어 배치를 순서대로 준비하세요."
-		)
+		_status_label.text = "구매한 재료를 순서대로 준비하세요."
 		_refresh_ui(false)
 	elif phase == GameManager.PHASE_PREP:
 		if not GameManager.complete_dawn_and_start_day():
 			_status_label.text = (
-				"쌀과 고등어 준비를 모두 완료하세요."
+				"구매한 재료 준비를 모두 완료하세요."
 			)
 			return
 		_save_checkpoint()
@@ -485,6 +519,9 @@ func _refresh_ui(reset_status: bool = true) -> void:
 	var phase: String = String(GameManager.state.get("phase", ""))
 	var is_market: bool = phase == GameManager.PHASE_MARKET
 	var is_prep: bool = phase == GameManager.PHASE_PREP
+	var has_egg_menu: bool = GameManager.is_menu_unlocked(
+		GameManager.MENU_EGG
+	)
 	var purchases: Dictionary = GameManager.get_market_purchases()
 	var prepared: Dictionary = GameManager.get_dawn_prepared()
 	_title_label.text = "Day %d 새벽 %s" % [
@@ -494,28 +531,54 @@ func _refresh_ui(reset_status: bool = true) -> void:
 	_currency_label.text = "%d문" % int(
 		GameManager.state.get("currency", 0)
 	)
-	_purchase_label.text = (
-		"구매: 쌀 %d · 고등어 %d" % [
-			int(purchases.get("rice", 0)),
-			int(purchases.get("mackerel", 0)),
-		]
-		if is_market
-		else "준비 완료: 밥 %d · 고등어 %d" % [
-			int(prepared.get("rice", 0)),
-			int(prepared.get("mackerel", 0)),
-		]
-	)
+	if is_market:
+		_purchase_label.text = (
+			"구매: 쌀 %d · 고등어 %d · 계란 %d" % [
+				int(purchases.get("rice", 0)),
+				int(purchases.get("mackerel", 0)),
+				int(purchases.get("egg", 0)),
+			]
+			if has_egg_menu
+			else "구매: 쌀 %d · 고등어 %d" % [
+				int(purchases.get("rice", 0)),
+				int(purchases.get("mackerel", 0)),
+			]
+		)
+	else:
+		_purchase_label.text = (
+			"준비 완료: 밥 %d · 고등어 %d · 계란 %d" % [
+				int(prepared.get("rice", 0)),
+				int(prepared.get("mackerel", 0)),
+				int(prepared.get("egg", 0)),
+			]
+			if has_egg_menu
+			else "준비 완료: 밥 %d · 고등어 %d" % [
+				int(prepared.get("rice", 0)),
+				int(prepared.get("mackerel", 0)),
+			]
+		)
 	var total_purchased: int = (
 		int(purchases.get("rice", 0))
 		+ int(purchases.get("mackerel", 0))
+		+ int(purchases.get("egg", 0))
 	)
 	_rice_purchase_pad.visible = is_market
 	_mackerel_purchase_pad.visible = is_market
+	_egg_purchase_pad.visible = is_market and has_egg_menu
 	for station_value: Variant in _preparation_stations.values():
 		var station: DawnPreparationStation = (
 			station_value as DawnPreparationStation
 		)
-		station.visible = is_prep
+		station.visible = (
+			is_prep
+			and (
+				station.get_material_id() != GameManager.MENU_EGG
+				or (
+					has_egg_menu
+					and int(purchases.get("egg", 0)) > 0
+				)
+			)
+		)
 	_refund_button.visible = is_market
 	_refund_button.disabled = total_purchased <= 0
 	_prepare_button.text = (

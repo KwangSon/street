@@ -13,12 +13,17 @@ const BLOCKED_COLOR: Color = Color("ffd1c7")
 var _player_active: bool = false
 var _purchase_progress: float = 0.0
 var _attempted: bool = false
+var _menu_id: String = GameManager.MENU_MACKEREL
 
 var _body: Polygon2D
 var _highlight: Line2D
 var _title_label: Label
 var _status_label: Label
 var _progress_bar: ProgressBar
+
+
+func configure(menu_id: String) -> void:
+	_menu_id = menu_id
 
 
 func _ready() -> void:
@@ -39,8 +44,11 @@ func is_player_in_range(
 	extra_margin: float = 0.0
 ) -> bool:
 	if (
-		GameManager.get_mackerel_station_level()
-		>= GameManager.MACKEREL_STATION_P0_MAX_LEVEL
+		GameManager.get_menu_station_level(_menu_id)
+		>= GameManager.get_menu_station_max_level(_menu_id)
+		or not GameManager.is_menu_station_purchase_available(
+			_menu_id
+		)
 		or GameManager.is_player_carrying_item()
 	):
 		return false
@@ -88,7 +96,7 @@ func interaction_tick(_player: DayPlayer, delta: float) -> void:
 
 	_purchase_progress = PURCHASE_DURATION
 	_attempted = true
-	GameManager.try_purchase_mackerel_station_upgrade()
+	GameManager.try_purchase_menu_station_upgrade(_menu_id)
 	_player_active = false
 	_refresh_visual()
 
@@ -160,25 +168,50 @@ func _build_visual() -> void:
 func _refresh_visual() -> void:
 	if _body == null:
 		return
+	var current_level: int = GameManager.get_menu_station_level(
+		_menu_id
+	)
+	var max_level: int = GameManager.get_menu_station_max_level(
+		_menu_id
+	)
 	var completed: bool = (
-		GameManager.get_mackerel_station_level()
-		>= GameManager.MACKEREL_STATION_P0_MAX_LEVEL
+		current_level >= max_level
 	)
 	_body.color = COMPLETE_COLOR if completed else PAD_COLOR
-	_title_label.text = (
-		"고등어 조리대 Lv.2"
-		if not completed
-		else "조리대 Lv.2 완료"
-	)
+	var menu_name: String = GameManager.get_menu_display_name(_menu_id)
+	if completed:
+		_title_label.text = "%s Lv.%d 완료" % [
+			menu_name,
+			current_level,
+		]
+	elif current_level <= 0:
+		_title_label.text = "%s 메뉴 해금" % menu_name
+	else:
+		_title_label.text = "%s 조리대 Lv.%d" % [
+			menu_name,
+			current_level + 1,
+		]
 
-	var upgrade_cost: int = GameManager.get_mackerel_upgrade_cost()
+	var upgrade_cost: int = (
+		GameManager.get_menu_station_upgrade_cost(_menu_id)
+	)
 	var currency: int = int(GameManager.state.get("currency", 0))
 	if completed:
-		_status_label.text = "제작 3.0초 · 판매 7문"
+		_status_label.text = "제작 %.1f초 · 판매 %d문" % [
+			GameManager.get_menu_craft_duration(_menu_id),
+			GameManager.get_menu_sale_price(_menu_id),
+		]
 		_status_label.add_theme_font_size_override("font_size", 15)
 		_status_label.add_theme_color_override(
 			"font_color",
 			TEXT_COLOR
+		)
+	elif not GameManager.is_menu_station_purchase_available(_menu_id):
+		_status_label.text = GameManager.DAY_TWO_GROWTH_MESSAGE
+		_status_label.add_theme_font_size_override("font_size", 12)
+		_status_label.add_theme_color_override(
+			"font_color",
+			BLOCKED_COLOR
 		)
 	elif GameManager.is_day_growth_purchase_reserve_blocked(
 		upgrade_cost

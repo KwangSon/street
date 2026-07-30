@@ -40,7 +40,8 @@ func is_player_in_range(
 ) -> bool:
 	if (
 		GameManager.get_unlocked_seat_count()
-		>= GameManager.P0_MAX_SEATS
+		>= GameManager.MAX_SEATS
+		or not GameManager.is_next_seat_purchase_available()
 		or GameManager.is_player_carrying_item()
 	):
 		return false
@@ -88,7 +89,7 @@ func interaction_tick(_player: DayPlayer, delta: float) -> void:
 
 	_purchase_progress = PURCHASE_DURATION
 	_attempted = true
-	GameManager.try_purchase_second_seat()
+	GameManager.try_purchase_next_seat()
 	_player_active = false
 	_refresh_visual()
 
@@ -156,25 +157,32 @@ func _build_visual() -> void:
 func _refresh_visual() -> void:
 	if _body == null:
 		return
+	var current_seats: int = GameManager.get_unlocked_seat_count()
 	var completed: bool = (
-		GameManager.get_unlocked_seat_count()
-		>= GameManager.P0_MAX_SEATS
+		current_seats >= GameManager.MAX_SEATS
 	)
 	_body.color = COMPLETE_COLOR if completed else PAD_COLOR
 	_title_label.text = (
-		"좌석 2 구매"
+		"좌석 %d 구매" % (current_seats + 1)
 		if not completed
-		else "좌석 2 설치 완료"
+		else "좌석 4 설치 완료"
 	)
 
-	var purchase_cost: int = GameManager.get_second_seat_cost()
+	var purchase_cost: int = GameManager.get_next_seat_cost()
 	var currency: int = int(GameManager.state.get("currency", 0))
 	if completed:
-		_status_label.text = "동시 손님 2명"
+		_status_label.text = "동시 손님 4명"
 		_status_label.add_theme_font_size_override("font_size", 15)
 		_status_label.add_theme_color_override(
 			"font_color",
 			TEXT_COLOR
+		)
+	elif not GameManager.is_next_seat_purchase_available():
+		_status_label.text = GameManager.DAY_TWO_GROWTH_MESSAGE
+		_status_label.add_theme_font_size_override("font_size", 12)
+		_status_label.add_theme_color_override(
+			"font_color",
+			BLOCKED_COLOR
 		)
 	elif GameManager.is_day_growth_purchase_reserve_blocked(
 		purchase_cost

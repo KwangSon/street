@@ -37,7 +37,7 @@ func test_signal_has_no_arguments() -> void:
 	screen.free()
 
 
-func test_builds_portrait_market_with_two_purchase_pads() -> void:
+func test_builds_portrait_market_with_locked_egg_purchase_pad() -> void:
 	var screen: DawnScreen = await _create_screen()
 
 	assert_eq(DawnScreen.VIEWPORT_SIZE, Vector2(720.0, 1280.0))
@@ -45,6 +45,8 @@ func test_builds_portrait_market_with_two_purchase_pads() -> void:
 	assert_not_null(screen.get_node("World/InteractionController"))
 	assert_not_null(screen.get_rice_purchase_pad())
 	assert_not_null(screen.get_mackerel_purchase_pad())
+	assert_not_null(screen.get_egg_purchase_pad())
+	assert_false(screen.get_egg_purchase_pad().visible)
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_not_null(screen.get_node("FixedUI/ActionPanel"))
 	assert_true(
@@ -54,6 +56,9 @@ func test_builds_portrait_market_with_two_purchase_pads() -> void:
 	)
 	assert_false(
 		screen.get_preparation_station("rice", 0).visible
+	)
+	assert_false(
+		screen.get_preparation_station("egg", 0).visible
 	)
 
 
@@ -139,6 +144,46 @@ func test_refund_button_restores_all_market_purchases() -> void:
 		).text,
 		"모두 되돌렸습니다"
 	)
+
+
+func test_unlocked_egg_purchase_and_preparation_reaches_day_two() -> void:
+	GameManager.state["progression"]["egg_station_level"] = 1
+	GameManager.state["currency"] = 18
+	var screen: DawnScreen = await _create_screen()
+	var player: DayPlayer = screen.get_player()
+
+	assert_true(screen.get_egg_purchase_pad().visible)
+	player.position = screen.get_egg_purchase_pad().position
+	await wait_physics_frames(70)
+
+	assert_eq(GameManager.state["currency"], 10)
+	assert_eq(GameManager.state["inventory"]["raw"]["egg"], 5)
+	assert_eq(GameManager.get_market_purchases()["egg"], 5)
+	assert_true(GameManager.try_purchase_market_bundle("rice"))
+	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
+	assert_false(screen.get_prepare_button().disabled)
+	screen.get_prepare_button().pressed.emit()
+
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_PREP)
+	assert_true(screen.get_preparation_station("egg", 0).visible)
+	for material_id: String in ["rice", "mackerel", "egg"]:
+		for step_index: int in range(4):
+			var station: DawnPreparationStation = (
+				screen.get_preparation_station(
+					material_id,
+					step_index
+				)
+			)
+			station.interaction_entered(player)
+			station.interaction_tick(player, 1.1)
+
+	assert_eq(GameManager.state["inventory"]["ready"]["egg"], 5)
+	assert_false(screen.get_prepare_button().disabled)
+	screen.get_prepare_button().pressed.emit()
+
+	assert_eq(GameManager.state["day"], 2)
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAY)
+	assert_eq(GameManager.state["inventory"]["ready"]["egg"], 5)
 
 
 func test_prepare_button_confirms_market_and_saves_checkpoint() -> void:

@@ -14,6 +14,7 @@ const BODY_COLOR: Color = Color("d9783d")
 const DIRECTION_COLOR: Color = Color("fff4d6")
 const CARRIED_PLATE_COLOR: Color = Color("eef4f7")
 const CARRIED_MACKEREL_COLOR: Color = Color("557f9b")
+const CARRIED_EGG_COLOR: Color = Color("e2bf4f")
 
 var move_speed: float = DEFAULT_MOVE_SPEED
 var _facing_direction: StringName = FACING_DOWN
@@ -249,8 +250,10 @@ func _refresh_carried_item_visual() -> void:
 	)
 	var has_item: bool = (
 		int(_carried_item.get("count", 0)) > 0
-		and String(_carried_item.get("menu", ""))
-		== GameManager.MENU_MACKEREL
+		and String(_carried_item.get("menu", "")) in [
+			GameManager.MENU_MACKEREL,
+			GameManager.MENU_EGG,
+		]
 	)
 	_carried_item_visual.visible = has_item
 	if not has_item:
@@ -262,16 +265,29 @@ func _refresh_carried_item_visual() -> void:
 	var prep_step: String = String(
 		_carried_item.get("step", "")
 	)
+	var menu_id: String = String(_carried_item.get("menu", ""))
+	var menu_name: String = GameManager.get_menu_display_name(menu_id)
+	_carried_mackerel_visual.color = (
+		CARRIED_EGG_COLOR
+		if menu_id == GameManager.MENU_EGG
+		else CARRIED_MACKEREL_COLOR
+	)
 	_carried_plate_visual.visible = is_plate
 	_carried_mackerel_visual.visible = (
 		is_plate
-		or prep_step != GameManager.PREP_NEED_MACKEREL
+		or prep_step not in [
+			GameManager.PREP_NEED_MACKEREL,
+			GameManager.PREP_NEED_EGG,
+		]
 	)
 	if is_plate:
-		_carried_item_label.text = "고등어 접시"
-	elif prep_step == GameManager.PREP_NEED_MACKEREL:
+		_carried_item_label.text = "%s 접시" % menu_name
+	elif prep_step in [
+		GameManager.PREP_NEED_MACKEREL,
+		GameManager.PREP_NEED_EGG,
+	]:
 		_carried_item_label.text = "주문"
 	elif prep_step == GameManager.PREP_NEED_RICE:
-		_carried_item_label.text = "고등어"
+		_carried_item_label.text = menu_name
 	else:
-		_carried_item_label.text = "고등어 + 밥"
+		_carried_item_label.text = "%s + 밥" % menu_name

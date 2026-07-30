@@ -55,6 +55,12 @@ const SETTLEMENT_TEXT_COLOR: Color = Color("35291f")
 const SEAT_2_ID: String = "seat_2"
 const SEAT_2_POSITION: Vector2 = Vector2(900.0, 920.0)
 const SEAT_2_TARGET: Vector2 = Vector2(900.0, 830.0)
+const SEAT_3_ID: String = "seat_3"
+const SEAT_3_POSITION: Vector2 = Vector2(500.0, 1120.0)
+const SEAT_3_TARGET: Vector2 = Vector2(500.0, 1030.0)
+const SEAT_4_ID: String = "seat_4"
+const SEAT_4_POSITION: Vector2 = Vector2(900.0, 1200.0)
+const SEAT_4_TARGET: Vector2 = Vector2(900.0, 1110.0)
 const STAFF_PAD_POSITION: Vector2 = Vector2(900.0, 1420.0)
 const SERVER_START_POSITION: Vector2 = Vector2(900.0, 1320.0)
 
@@ -100,6 +106,14 @@ const FACILITIES: Array[Dictionary] = [
 		"collision": true,
 	},
 	{
+		"name": "EggBox",
+		"label": "계란 바구니",
+		"position": Vector2(760.0, 300.0),
+		"size": Vector2(140.0, 96.0),
+		"color": Color("d7bd61"),
+		"collision": true,
+	},
+	{
 		"name": "EggStation",
 		"label": "계란 조리대",
 		"position": Vector2(940.0, 340.0),
@@ -115,6 +129,22 @@ const FACILITIES: Array[Dictionary] = [
 		"color": Color("8d6b51"),
 		"collision": true,
 	},
+	{
+		"name": "Seat3",
+		"label": "좌석 3",
+		"position": SEAT_3_POSITION,
+		"size": Vector2(120.0, 100.0),
+		"color": Color("8d6b51"),
+		"collision": true,
+	},
+	{
+		"name": "Seat4",
+		"label": "좌석 4",
+		"position": SEAT_4_POSITION,
+		"size": Vector2(120.0, 100.0),
+		"color": Color("8d6b51"),
+		"collision": true,
+	},
 ]
 
 var _world: Node2D
@@ -123,10 +153,13 @@ var _camera: Camera2D
 var _navigation: DayNavigation
 var _interaction_controller: DayInteractionController
 var _mackerel_station: MackerelStation
+var _egg_station: MackerelStation
 var _customer_manager: DayCustomerManager
 var _ingredient_box: DayPreparationSource
+var _egg_box: DayPreparationSource
 var _rice_pot: DayPreparationSource
 var _mackerel_upgrade_pad: DayUpgradePad
+var _egg_upgrade_pad: DayUpgradePad
 var _seat_purchase_pad: DaySeatPurchasePad
 var _staff_hire_pad: DayStaffHirePad
 var _server: DayServer
@@ -151,6 +184,7 @@ func _ready() -> void:
 	GameManager.ensure_day_runtime_state()
 	_build_world()
 	_build_fixed_ui()
+	_refresh_inventory_hud()
 	if not GameManager.state_changed.is_connected(
 		_on_game_state_changed
 	):
@@ -245,6 +279,10 @@ func get_mackerel_station() -> MackerelStation:
 	return _mackerel_station
 
 
+func get_egg_station() -> MackerelStation:
+	return _egg_station
+
+
 func get_customer_manager() -> DayCustomerManager:
 	return _customer_manager
 
@@ -253,12 +291,20 @@ func get_ingredient_box() -> DayPreparationSource:
 	return _ingredient_box
 
 
+func get_egg_box() -> DayPreparationSource:
+	return _egg_box
+
+
 func get_rice_pot() -> DayPreparationSource:
 	return _rice_pot
 
 
 func get_mackerel_upgrade_pad() -> DayUpgradePad:
 	return _mackerel_upgrade_pad
+
+
+func get_egg_upgrade_pad() -> DayUpgradePad:
+	return _egg_upgrade_pad
 
 
 func get_seat_purchase_pad() -> DaySeatPurchasePad:
@@ -331,8 +377,15 @@ func _build_world() -> void:
 
 	_mackerel_upgrade_pad = DayUpgradePadScript.new()
 	_mackerel_upgrade_pad.name = "MackerelUpgradePad"
+	_mackerel_upgrade_pad.configure(GameManager.MENU_MACKEREL)
 	_mackerel_upgrade_pad.position = Vector2(540.0, 465.0)
 	_world.add_child(_mackerel_upgrade_pad)
+
+	_egg_upgrade_pad = DayUpgradePadScript.new()
+	_egg_upgrade_pad.name = "EggUpgradePad"
+	_egg_upgrade_pad.configure(GameManager.MENU_EGG)
+	_egg_upgrade_pad.position = Vector2(940.0, 500.0)
+	_world.add_child(_egg_upgrade_pad)
 
 	_seat_purchase_pad = DaySeatPurchasePadScript.new()
 	_seat_purchase_pad.name = "Seat2PurchasePad"
@@ -356,9 +409,14 @@ func _build_world() -> void:
 	_interaction_controller.register_interactable(_mackerel_station)
 	_interaction_controller.register_interactable(_ingredient_box)
 	_interaction_controller.register_interactable(_rice_pot)
+	if _egg_station != null:
+		_interaction_controller.register_interactable(_egg_station)
+	if _egg_box != null:
+		_interaction_controller.register_interactable(_egg_box)
 	_interaction_controller.register_interactable(
 		_mackerel_upgrade_pad
 	)
+	_interaction_controller.register_interactable(_egg_upgrade_pad)
 	_interaction_controller.register_interactable(
 		_seat_purchase_pad
 	)
@@ -470,20 +528,32 @@ func _add_map_boundaries() -> void:
 func _add_facility(facility: Dictionary) -> void:
 	var facility_node: Node2D
 	var facility_name: String = String(facility["name"])
-	if facility_name == "MackerelStation":
-		_mackerel_station = MackerelStationScript.new()
-		_mackerel_station.configure(
-			facility["size"],
-			facility["color"]
+	if facility_name in ["MackerelStation", "EggStation"]:
+		var menu_station: MackerelStation = MackerelStationScript.new()
+		var station_menu_id: String = (
+			GameManager.MENU_EGG
+			if facility_name == "EggStation"
+			else GameManager.MENU_MACKEREL
 		)
-		facility_node = _mackerel_station
-	elif facility_name in ["IngredientBox", "RicePot"]:
+		menu_station.configure(
+			facility["size"],
+			facility["color"],
+			station_menu_id
+		)
+		if station_menu_id == GameManager.MENU_EGG:
+			_egg_station = menu_station
+		else:
+			_mackerel_station = menu_station
+		facility_node = menu_station
+	elif facility_name in ["IngredientBox", "EggBox", "RicePot"]:
 		var preparation_source: DayPreparationSource = (
 			DayPreparationSourceScript.new()
 		)
 		var source_kind: DayPreparationSource.SourceKind = (
 			DayPreparationSource.SourceKind.MACKEREL
 			if facility_name == "IngredientBox"
+			else DayPreparationSource.SourceKind.EGG
+			if facility_name == "EggBox"
 			else DayPreparationSource.SourceKind.RICE
 		)
 		preparation_source.configure(
@@ -494,6 +564,8 @@ func _add_facility(facility: Dictionary) -> void:
 		)
 		if facility_name == "IngredientBox":
 			_ingredient_box = preparation_source
+		elif facility_name == "EggBox":
+			_egg_box = preparation_source
 		else:
 			_rice_pot = preparation_source
 		facility_node = preparation_source
@@ -506,7 +578,9 @@ func _add_facility(facility: Dictionary) -> void:
 	var facility_size: Vector2 = facility["size"]
 	if (
 		facility_node != _mackerel_station
+		and facility_node != _egg_station
 		and facility_node != _ingredient_box
+		and facility_node != _egg_box
 		and facility_node != _rice_pot
 	):
 		var visual: Polygon2D = Polygon2D.new()
@@ -837,7 +911,8 @@ func _on_viewport_size_changed() -> void:
 
 
 func _on_game_state_changed() -> void:
-	_install_second_seat_if_unlocked()
+	_install_unlocked_seats()
+	_install_egg_facilities_if_unlocked()
 	_install_server_if_hired()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
@@ -926,28 +1001,85 @@ func _on_customer_interactable_created(
 	_interaction_controller.register_interactable(interactable)
 
 
-func _install_second_seat_if_unlocked() -> void:
+func _install_unlocked_seats() -> void:
+	if _world == null:
+		return
+	var unlocked_seats: int = GameManager.get_unlocked_seat_count()
+	var seat_data: Dictionary = {
+		2: {
+			"name": "Seat2",
+			"id": SEAT_2_ID,
+			"target": SEAT_2_TARGET,
+		},
+		3: {
+			"name": "Seat3",
+			"id": SEAT_3_ID,
+			"target": SEAT_3_TARGET,
+		},
+		4: {
+			"name": "Seat4",
+			"id": SEAT_4_ID,
+			"target": SEAT_4_TARGET,
+		},
+	}
+	var installed_any: bool = false
+	for seat_number: int in range(2, unlocked_seats + 1):
+		var current_seat: Dictionary = seat_data[seat_number]
+		var facility_name: String = String(current_seat["name"])
+		if _world.get_node_or_null(facility_name) != null:
+			continue
+		for facility: Dictionary in FACILITIES:
+			if String(facility["name"]) != facility_name:
+				continue
+			_add_facility(facility)
+			installed_any = true
+			break
+		if _customer_manager != null:
+			_customer_manager.add_seat(
+				String(current_seat["id"]),
+				Vector2(current_seat["target"])
+			)
+	if installed_any and _navigation != null:
+		_navigation.configure(
+			MAP_SIZE,
+			DayPlayer.COLLISION_RADIUS,
+			_get_navigation_obstacle_rects()
+		)
+
+
+func _install_egg_facilities_if_unlocked() -> void:
 	if (
 		_world == null
-		or GameManager.get_unlocked_seat_count() < 2
-		or _world.get_node_or_null("Seat2") != null
+		or not GameManager.is_menu_unlocked(GameManager.MENU_EGG)
 	):
 		return
-	for facility: Dictionary in FACILITIES:
-		if String(facility["name"]) != "Seat2":
+	var installed_any: bool = false
+	for facility_name: String in ["EggBox", "EggStation"]:
+		if _world.get_node_or_null(facility_name) != null:
 			continue
-		_add_facility(facility)
-		break
+		for facility: Dictionary in FACILITIES:
+			if String(facility["name"]) != facility_name:
+				continue
+			_add_facility(facility)
+			installed_any = true
+			break
+	if not installed_any:
+		return
+	if _interaction_controller != null:
+		if _egg_box != null:
+			_interaction_controller.register_interactable(_egg_box)
+		if _egg_station != null:
+			_interaction_controller.register_interactable(_egg_station)
 	if _navigation != null:
 		_navigation.configure(
 			MAP_SIZE,
 			DayPlayer.COLLISION_RADIUS,
 			_get_navigation_obstacle_rects()
 		)
-	if _customer_manager != null:
-		_customer_manager.add_seat(
-			SEAT_2_ID,
-			SEAT_2_TARGET
+	if _server != null and _egg_station != null:
+		_server.set_station_position(
+			GameManager.MENU_EGG,
+			_egg_station.position
 		)
 
 
@@ -961,9 +1093,14 @@ func _install_server_if_hired() -> void:
 	):
 		return
 	_server = DayServerScript.new()
+	var station_positions: Dictionary = {
+		GameManager.MENU_MACKEREL: _mackerel_station.position,
+	}
+	if _egg_station != null:
+		station_positions[GameManager.MENU_EGG] = _egg_station.position
 	_server.configure(
 		SERVER_START_POSITION,
-		_mackerel_station.position,
+		station_positions,
 		_customer_manager,
 		_navigation
 	)
@@ -976,12 +1113,22 @@ func _get_unlocked_seat_targets() -> Dictionary:
 	}
 	if GameManager.get_unlocked_seat_count() >= 2:
 		seat_targets[SEAT_2_ID] = SEAT_2_TARGET
+	if GameManager.get_unlocked_seat_count() >= 3:
+		seat_targets[SEAT_3_ID] = SEAT_3_TARGET
+	if GameManager.get_unlocked_seat_count() >= 4:
+		seat_targets[SEAT_4_ID] = SEAT_4_TARGET
 	return seat_targets
 
 
 func _should_build_facility(facility_name: String) -> bool:
 	if facility_name == "Seat2":
 		return GameManager.get_unlocked_seat_count() >= 2
+	if facility_name == "Seat3":
+		return GameManager.get_unlocked_seat_count() >= 3
+	if facility_name == "Seat4":
+		return GameManager.get_unlocked_seat_count() >= 4
+	if facility_name in ["EggBox", "EggStation"]:
+		return GameManager.is_menu_unlocked(GameManager.MENU_EGG)
 	return true
 
 
@@ -989,10 +1136,17 @@ func _refresh_inventory_hud() -> void:
 	if _inventory_label == null:
 		return
 	var ready_inventory: Dictionary = _get_ready_inventory()
-	_inventory_label.text = "밥 %d  |  고등어 %d" % [
-		int(ready_inventory.get("rice", 0)),
-		int(ready_inventory.get("mackerel", 0)),
-	]
+	if GameManager.is_menu_unlocked(GameManager.MENU_EGG):
+		_inventory_label.text = "밥 %d | 고등어 %d | 계란 %d" % [
+			int(ready_inventory.get("rice", 0)),
+			int(ready_inventory.get("mackerel", 0)),
+			int(ready_inventory.get("egg", 0)),
+		]
+	else:
+		_inventory_label.text = "밥 %d  |  고등어 %d" % [
+			int(ready_inventory.get("rice", 0)),
+			int(ready_inventory.get("mackerel", 0)),
+		]
 
 
 func _refresh_currency_hud() -> void:
@@ -1054,11 +1208,12 @@ func _refresh_settlement_ui() -> void:
 		float(summary.get("waste_cost", 0.0)),
 	]
 	_settlement_progress_label.text = (
-		"오늘 성장: 조리대 Lv.%d · 좌석 %d · 점원 %s\n\n"
+		"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d · 점원 %s\n\n"
 		+ "내일 약 %d~%d명 예상\n"
 		+ "내일 장사할 재료를 사러 갑니다"
 	) % [
 		GameManager.get_mackerel_station_level(),
+		GameManager.get_egg_station_level(),
 		GameManager.get_unlocked_seat_count(),
 		"고용" if GameManager.is_server_hired() else "미고용",
 		int(summary.get("next_customer_min", 18)),

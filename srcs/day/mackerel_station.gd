@@ -21,6 +21,7 @@ var craft_duration: float = DEFAULT_CRAFT_DURATION
 var use_game_manager_tuning: bool = true
 var facility_size: Vector2 = Vector2(180.0, 96.0)
 var base_color: Color = Color("7197ad")
+var menu_id: String = GameManager.MENU_MACKEREL
 
 var _station_state: StationState = StationState.IDLE
 var _session_mode: SessionMode = SessionMode.NONE
@@ -36,7 +37,7 @@ var _title_label: Label
 
 func _ready() -> void:
 	if use_game_manager_tuning:
-		craft_duration = GameManager.get_mackerel_craft_duration()
+		craft_duration = GameManager.get_menu_craft_duration(menu_id)
 	_build_visual()
 	if not GameManager.state_changed.is_connected(
 		_on_game_state_changed
@@ -45,9 +46,14 @@ func _ready() -> void:
 	_refresh_visual()
 
 
-func configure(size: Vector2, color: Color) -> void:
+func configure(
+	size: Vector2,
+	color: Color,
+	station_menu_id: String = GameManager.MENU_MACKEREL
+) -> void:
 	facility_size = size
 	base_color = color
+	menu_id = station_menu_id
 
 
 func get_station_state() -> StationState:
@@ -74,10 +80,13 @@ func is_player_in_range(
 	var prep_step: String = String(
 		carried_item.get("step", "")
 	)
-	if prep_step not in [
-		GameManager.PREP_READY_TO_COOK,
-		GameManager.PREP_COOKING,
-	]:
+	if (
+		String(carried_item.get("menu", "")) != menu_id
+		or prep_step not in [
+			GameManager.PREP_READY_TO_COOK,
+			GameManager.PREP_COOKING,
+		]
+	):
 		return false
 	var half_size: Vector2 = facility_size * 0.5
 	var local_offset: Vector2 = player_position - global_position
@@ -132,7 +141,7 @@ func interaction_tick(player: DayPlayer, delta: float) -> void:
 		_craft_progress = 0.0
 		_ingredients_reserved = false
 		_session_mode = SessionMode.NONE
-		GameManager.complete_active_order_craft()
+		GameManager.complete_active_order_craft(menu_id)
 	player.set_carried_item(GameManager.get_carried_item())
 	_refresh_visual()
 
@@ -151,7 +160,7 @@ func set_interaction_highlighted(highlighted: bool) -> void:
 func _try_start_craft() -> bool:
 	if _ingredients_reserved:
 		return true
-	if not GameManager.try_start_active_order_craft():
+	if not GameManager.try_start_active_order_craft(menu_id):
 		return false
 	_ingredients_reserved = true
 	_refresh_visual()
@@ -161,12 +170,17 @@ func _try_start_craft() -> bool:
 func _resolve_station_state() -> StationState:
 	if _ingredients_reserved:
 		return StationState.CRAFTING
-	if GameManager.has_station_item():
+	var station_item: Dictionary = GameManager.get_station_item()
+	if (
+		not station_item.is_empty()
+		and String(station_item.get("menu", "")) == menu_id
+	):
 		return StationState.READY
 	var carried_item: Dictionary = GameManager.get_carried_item()
 	if (
 		String(carried_item.get("kind", ""))
 		== GameManager.CARRIED_KIND_PLATE
+		and String(carried_item.get("menu", "")) == menu_id
 	):
 		return StationState.READY
 	return StationState.IDLE
@@ -177,10 +191,11 @@ func _refresh_visual() -> void:
 	if _progress_bar == null:
 		return
 	if use_game_manager_tuning and not _ingredients_reserved:
-		craft_duration = GameManager.get_mackerel_craft_duration()
-	_title_label.text = "고등어 조리대 Lv.%d" % (
-		GameManager.get_mackerel_station_level()
-	)
+		craft_duration = GameManager.get_menu_craft_duration(menu_id)
+	_title_label.text = "%s 조리대 Lv.%d" % [
+		GameManager.get_menu_display_name(menu_id),
+		GameManager.get_menu_station_level(menu_id),
+	]
 
 	var safe_duration: float = maxf(craft_duration, 0.001)
 	_progress_bar.value = clampf(
@@ -198,8 +213,13 @@ func _refresh_visual() -> void:
 			var prep_step: String = String(
 				carried_item.get("step", "")
 			)
-			if prep_step == GameManager.PREP_NEED_MACKEREL:
-				_status_label.text = "고등어 먼저"
+			if prep_step in [
+				GameManager.PREP_NEED_MACKEREL,
+				GameManager.PREP_NEED_EGG,
+			]:
+				_status_label.text = "%s 먼저" % (
+					GameManager.get_menu_display_name(menu_id)
+				)
 			elif prep_step == GameManager.PREP_NEED_RICE:
 				_status_label.text = "밥 먼저"
 			elif prep_step == GameManager.PREP_READY_TO_COOK:

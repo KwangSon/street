@@ -8,6 +8,7 @@ const HIGHLIGHT_COLOR: Color = Color("f2c94c")
 const TEXT_COLOR: Color = Color("35291f")
 const RICE_COLOR: Color = Color("c6a477")
 const MACKEREL_COLOR: Color = Color("7197ad")
+const EGG_COLOR: Color = Color("d7bd61")
 
 var _material_id: String = ""
 var _player_active: bool = false
@@ -45,6 +46,12 @@ func is_player_in_range(
 		!= GameManager.SCREEN_DAWN
 		or String(GameManager.state.get("phase", ""))
 		!= GameManager.PHASE_MARKET
+		or (
+			_material_id == GameManager.MENU_EGG
+			and not GameManager.is_menu_unlocked(
+				GameManager.MENU_EGG
+			)
+		)
 	):
 		return false
 	var half_size: Vector2 = PAD_SIZE * 0.5
@@ -109,7 +116,11 @@ func _build_visual() -> void:
 	var body: Polygon2D = Polygon2D.new()
 	body.name = "Visual"
 	body.color = (
-		RICE_COLOR if _material_id == "rice" else MACKEREL_COLOR
+		RICE_COLOR
+		if _material_id == "rice"
+		else EGG_COLOR
+		if _material_id == GameManager.MENU_EGG
+		else MACKEREL_COLOR
 	)
 	body.polygon = _rectangle_polygon(PAD_SIZE)
 	add_child(body)
@@ -164,7 +175,9 @@ func _refresh_visual() -> void:
 	)
 	var purchases: Dictionary = GameManager.get_market_purchases()
 	var material_name: String = (
-		"쌀" if _material_id == "rice" else "고등어"
+		"쌀"
+		if _material_id == "rice"
+		else GameManager.get_menu_display_name(_material_id)
 	)
 	_title_label.text = "%s %d인분" % [
 		material_name,
