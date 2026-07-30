@@ -23,6 +23,7 @@ func test_default_state_starts_first_day_service() -> void:
 	assert_true(state["day_runtime"]["customers"].is_empty())
 	assert_true(state["day_runtime"]["seat_assignments"].is_empty())
 	assert_true(state["day_runtime"]["orders"].is_empty())
+	assert_true(state["day_runtime"]["payments"].is_empty())
 
 
 func test_apply_loaded_state_deep_copies_and_preserves_extra_keys() -> void:
@@ -167,6 +168,38 @@ func test_only_matching_customer_receives_finished_plate() -> void:
 		GameManager.ORDER_WAITING_FOR_PAYMENT
 	)
 	assert_false(GameManager.mark_customer_finished_eating(customer_id))
+
+	var payment: Dictionary = GameManager.get_customer_payment(
+		customer_id
+	)
+	assert_eq(payment["amount"], GameManager.MACKEREL_PRICE)
+	assert_eq(payment["status"], GameManager.PAYMENT_WAITING)
+	assert_true(GameManager.collect_customer_payment(customer_id))
+	assert_eq(GameManager.state["currency"], 6)
+	assert_eq(
+		GameManager.state["day_stats"]["plates_sold"]["mackerel"],
+		1
+	)
+	assert_eq(GameManager.state["day_stats"]["revenue"], 6)
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_LEAVING
+	)
+	assert_eq(
+		GameManager.state["day_runtime"]["seat_assignments"][
+			"seat_1"
+		],
+		customer_id
+	)
+	assert_true(GameManager.finish_customer_exit(customer_id))
+	assert_true(GameManager.get_day_customer(customer_id).is_empty())
+	assert_true(GameManager.get_day_order(customer_id).is_empty())
+	assert_true(
+		GameManager.get_customer_payment(customer_id).is_empty()
+	)
+	assert_true(
+		GameManager.state["day_runtime"]["seat_assignments"].is_empty()
+	)
 
 
 func test_customer_reserves_one_seat_and_creates_mackerel_order() -> void:

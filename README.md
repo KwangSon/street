@@ -14,7 +14,7 @@
 
 ## 현재 구현 상태
 
-현재 저장소에는 실행·저장 로드, 낮 화면 이동과 첫 손님의 주문→제작→서빙→식사 흐름을 담당하는 코드 기반이 구현돼 있다.
+현재 저장소에는 실행·저장 로드, 낮 화면 이동과 손님의 주문→제작→서빙→식사→결제→퇴장 반복 흐름을 담당하는 코드 기반이 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
@@ -24,6 +24,7 @@
 - `srcs/day/day_customer_manager.gd`: 첫 손님 생성, 좌석 예약과 고등어 주문 생성
 - `srcs/day/day_customer_order_target.gd`: 손님 접근 시 주문 한 건 수령
 - `srcs/day/day_preparation_source.gd`: 고등어 상자와 밥통의 순차 재료 수령
+- `srcs/day/day_payment.gd`: 좌석 옆 엽전 표시와 접근 회수
 - `srcs/day/day_interaction_controller.gd`: 접근 대상의 우선순위·거리 선택과 진입·이탈 처리
 - `srcs/day/mackerel_station.gd`: 준비가 끝난 주문의 제작 진행, 일시정지와 접시 완성
 - `srcs/day/day_navigation.gd`: 시설을 우회하는 40px A* 이동 경로
@@ -33,7 +34,7 @@
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
 - 실행용 메인 장면이 `project.godot`에 등록돼 있다.
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
-- 첫 손님 한 명이 입구에서 좌석 1로 이동해 고등어를 주문하고, 주문과 일치하는 접시를 받으면 식사 후 결제 대기가 된다. 대기열·엽전 회수·퇴장은 아직 구현하지 않았다.
+- 손님 한 명이 좌석 1에서 고등어 주문, 식사, 6문 결제와 퇴장을 마치면 좌석을 반납하고 다음 손님이 생성된다. 다중 손님 대기열은 아직 구현하지 않았다.
 - 낮 영업의 고등어 1접시는 `손님 주문 수령 → 고등어 상자 → 밥통 → 고등어 조리대` 순서로 만든다. 조리대에 바로 접근하면 제작되지 않는다.
 - 새벽 화면과 손님·서빙·결제는 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
 
@@ -65,6 +66,7 @@ street/
 │   │   ├── day_interactable.gd
 │   │   ├── day_interaction_controller.gd
 │   │   ├── day_navigation.gd
+│   │   ├── day_payment.gd
 │   │   ├── day_player.gd
 │   │   ├── day_preparation_source.gd
 │   │   └── mackerel_station.gd

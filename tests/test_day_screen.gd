@@ -204,6 +204,35 @@ func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 		"계산"
 	)
 
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	var payment: DayPayment = customer_manager.get_payment(
+		"customer_1"
+	)
+	assert_not_null(payment)
+	screen.get_player().position = payment.position
+	await wait_physics_frames(2)
+
+	assert_eq(GameManager.state["currency"], 6)
+	assert_true(customer.is_moving_to_exit())
+	assert_null(customer_manager.get_payment("customer_1"))
+
+	customer.position = customer.get_exit_target()
+	await wait_physics_frames(3)
+	await wait_process_frames(1)
+
+	assert_true(
+		GameManager.get_day_customer("customer_1").is_empty()
+	)
+	assert_not_null(customer_manager.get_customer("customer_2"))
+	assert_eq(
+		GameManager.state["day_runtime"]["seat_assignments"][
+			"seat_1"
+		],
+		"customer_2"
+	)
+
 
 func test_touch_tap_sets_world_destination() -> void:
 	var screen: DayScreen = await _create_screen()

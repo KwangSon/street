@@ -3,6 +3,7 @@ class_name DayCustomer
 
 signal reached_seat(customer_id: String)
 signal finished_eating(customer_id: String)
+signal exited(customer_id: String)
 
 const DayCustomerOrderTargetScript: Script = preload(
 	"res://srcs/day/day_customer_order_target.gd"
@@ -19,6 +20,8 @@ var eating_duration: float = 2.0
 var _customer_id: String = ""
 var _seat_target: Vector2 = Vector2.ZERO
 var _moving_to_seat: bool = false
+var _exit_target: Vector2 = Vector2.ZERO
+var _moving_to_exit: bool = false
 var _order_bubble: Node2D
 var _order_label: Label
 var _order_target: DayCustomerOrderTarget
@@ -53,6 +56,9 @@ func _physics_process(delta: float) -> void:
 	if _moving_to_seat:
 		_move_to_seat(delta)
 		return
+	if _moving_to_exit:
+		_move_to_exit(delta)
+		return
 
 	velocity = Vector2.ZERO
 	if not _is_eating:
@@ -78,6 +84,21 @@ func get_seat_target() -> Vector2:
 
 func get_order_target() -> DayCustomerOrderTarget:
 	return _order_target
+
+
+func start_leaving(exit_target: Vector2) -> void:
+	_exit_target = exit_target
+	_moving_to_exit = true
+	_moving_to_seat = false
+	_is_eating = false
+
+
+func is_moving_to_exit() -> bool:
+	return _moving_to_exit
+
+
+func get_exit_target() -> Vector2:
+	return _exit_target
 
 
 func _build_visual() -> void:
@@ -180,6 +201,22 @@ func _move_to_seat(delta: float) -> void:
 		velocity = Vector2.ZERO
 		_moving_to_seat = false
 		reached_seat.emit(_customer_id)
+		return
+
+	velocity = offset.normalized() * minf(
+		MOVE_SPEED,
+		offset.length() / maxf(delta, 0.0001)
+	)
+	move_and_slide()
+
+
+func _move_to_exit(delta: float) -> void:
+	var offset: Vector2 = _exit_target - position
+	if offset.length() <= ARRIVAL_DISTANCE:
+		position = _exit_target
+		velocity = Vector2.ZERO
+		_moving_to_exit = false
+		exited.emit(_customer_id)
 		return
 
 	velocity = offset.normalized() * minf(

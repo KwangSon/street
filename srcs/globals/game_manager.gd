@@ -18,11 +18,17 @@ const CUSTOMER_WAITING_FOR_ORDER: String = "waiting_for_order"
 const CUSTOMER_WAITING_FOR_FOOD: String = "waiting_for_food"
 const CUSTOMER_EATING: String = "eating"
 const CUSTOMER_WAITING_FOR_PAYMENT: String = "waiting_for_payment"
+const CUSTOMER_LEAVING: String = "leaving"
 const ORDER_WAITING: String = "waiting"
 const ORDER_PREPARING: String = "preparing"
 const ORDER_READY_TO_SERVE: String = "ready_to_serve"
 const ORDER_EATING: String = "eating"
 const ORDER_WAITING_FOR_PAYMENT: String = "waiting_for_payment"
+const ORDER_PAID: String = "paid"
+const PAYMENT_WAITING: String = "waiting"
+const PAYMENT_COLLECTED: String = "collected"
+
+const MACKEREL_PRICE: int = 6
 
 const PREP_NEED_MACKEREL: String = "need_mackerel"
 const PREP_NEED_RICE: String = "need_rice"
@@ -452,8 +458,90 @@ func mark_customer_finished_eating(customer_id: String) -> bool:
 
 	order["status"] = ORDER_WAITING_FOR_PAYMENT
 	customer["state"] = CUSTOMER_WAITING_FOR_PAYMENT
+	var payments: Dictionary = day_runtime["payments"]
+	payments[customer_id] = {
+		"customer_id": customer_id,
+		"amount": MACKEREL_PRICE,
+		"status": PAYMENT_WAITING,
+	}
 	state_changed.emit()
 	return true
+
+
+func collect_customer_payment(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	var orders: Dictionary = day_runtime["orders"]
+	var payments: Dictionary = day_runtime["payments"]
+	if (
+		not customers.has(customer_id)
+		or not orders.has(customer_id)
+		or not payments.has(customer_id)
+	):
+		return false
+
+	var customer: Dictionary = customers[customer_id]
+	var order: Dictionary = orders[customer_id]
+	var payment: Dictionary = payments[customer_id]
+	if (
+		String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_FOR_PAYMENT
+		or String(order.get("status", ""))
+		!= ORDER_WAITING_FOR_PAYMENT
+		or String(payment.get("status", ""))
+		!= PAYMENT_WAITING
+	):
+		return false
+
+	var amount: int = int(payment.get("amount", 0))
+	if amount <= 0:
+		return false
+	state["currency"] = int(state.get("currency", 0)) + amount
+	payment["status"] = PAYMENT_COLLECTED
+	order["status"] = ORDER_PAID
+	customer["state"] = CUSTOMER_LEAVING
+	_record_mackerel_sale(amount)
+	state_changed.emit()
+	return true
+
+
+func finish_customer_exit(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id):
+		return false
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(customer.get("state", ""))
+		!= CUSTOMER_LEAVING
+	):
+		return false
+
+	var seat_id: String = String(customer.get("seat_id", ""))
+	var seat_assignments: Dictionary = (
+		day_runtime["seat_assignments"]
+	)
+	if (
+		not seat_id.is_empty()
+		and String(seat_assignments.get(seat_id, ""))
+		== customer_id
+	):
+		seat_assignments.erase(seat_id)
+	customers.erase(customer_id)
+	day_runtime["orders"].erase(customer_id)
+	day_runtime["payments"].erase(customer_id)
+	state_changed.emit()
+	return true
+
+
+func get_customer_payment(customer_id: String) -> Dictionary:
+	_ensure_day_runtime_state()
+	var payments: Dictionary = state["day_runtime"]["payments"]
+	if not payments.has(customer_id):
+		return {}
+	return Dictionary(payments[customer_id]).duplicate(true)
 
 
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
@@ -505,6 +593,7 @@ func _create_default_day_runtime() -> Dictionary:
 		"customers": {},
 		"seat_assignments": {},
 		"orders": {},
+		"payments": {},
 		"carried_item": {
 			"kind": "",
 			"menu": "",
@@ -608,6 +697,7 @@ func _ensure_day_runtime_state() -> bool:
 		"customers",
 		"seat_assignments",
 		"orders",
+		"payments",
 	]:
 		var dictionary_value: Variant = day_runtime.get(
 			dictionary_key,
@@ -680,4 +770,30 @@ func _is_prep_at_step(
 		).is_empty()
 		and String(carried_item.get("step", ""))
 		== expected_step
+	)
+
+
+func _record_mackerel_sale(amount: int) -> void:
+	var day_stats: Dictionary = state.get("day_stats", {})
+	if not state.has("day_stats"):
+		state["day_stats"] = day_stats
+	var day_plates: Dictionary = day_stats.get("plates_sold", {})
+	day_stats["plates_sold"] = day_plates
+	day_plates[MENU_MACKEREL] = (
+		int(day_plates.get(MENU_MACKEREL, 0)) + 1
+	)
+	day_stats["revenue"] = int(day_stats.get("revenue", 0)) + amount
+
+	var totals: Dictionary = state.get("totals", {})
+	if not state.has("totals"):
+		state["totals"] = totals
+	var total_plates: Dictionary = totals.get("plates_sold", {})
+	totals["plates_sold"] = total_plates
+	total_plates[MENU_MACKEREL] = (
+		int(total_plates.get(MENU_MACKEREL, 0)) + 1
+	)
+	totals["revenue"] = int(totals.get("revenue", 0)) + amount
+	totals["highest_daily_revenue"] = maxi(
+		int(totals.get("highest_daily_revenue", 0)),
+		int(day_stats["revenue"])
 	)
