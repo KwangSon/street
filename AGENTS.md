@@ -8,6 +8,7 @@
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
 - The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen` and `DawnScreen`, JSON save loading, the complete P0 Day 1 loop through settlement, dawn market purchase/refund, ordered batch preparation, the saved Day 2 transition, and GUT coverage for this foundation.
+- `tests/test_p0_loop.gd` runs the state-authoritative Day 1 growth, 20 sales, settlement, dawn purchase/preparation, Day 2 transition, save, and reload three consecutive times.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
