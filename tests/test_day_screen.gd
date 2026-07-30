@@ -3,13 +3,16 @@ extends GutTest
 const DayScreenScript: Script = preload(
 	"res://srcs/screens/day_screen.gd"
 )
+const ACCELERATED_TIME_SCALE: float = 4.0
 
 
 func before_each() -> void:
+	Engine.time_scale = 1.0
 	GameManager.state = GameManager.create_default_game_state()
 
 
 func after_each() -> void:
+	Engine.time_scale = 1.0
 	GameManager.state = {}
 
 
@@ -734,6 +737,88 @@ func test_first_upgrade_is_bought_with_real_movement_under_sixty_seconds() -> vo
 		GameManager.state["day_stats"]["plates_sold"]["mackerel"],
 		4
 	)
+
+
+func test_first_staff_is_hired_with_real_growth_path_under_five_minutes() -> void:
+	Engine.time_scale = ACCELERATED_TIME_SCALE
+	var service_started_at: float = float(
+		GameManager.state["service_time_remaining"]
+	)
+	var screen: DayScreen = await _create_screen()
+
+	for customer_number: int in range(1, 5):
+		await _complete_real_movement_sale(
+			screen,
+			"customer_%d" % customer_number
+		)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_mackerel_upgrade_pad().position
+		)
+	)
+	var growth_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return GameManager.get_mackerel_station_level() == 2,
+		180
+	)
+	assert_lte(growth_frames, 180)
+
+	for customer_number: int in range(5, 9):
+		await _complete_real_movement_sale(
+			screen,
+			"customer_%d" % customer_number
+		)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_seat_purchase_pad().position
+		)
+	)
+	growth_frames = await _wait_for_condition(
+		func() -> bool:
+			return GameManager.get_unlocked_seat_count() == 2,
+		180
+	)
+	assert_lte(growth_frames, 180)
+
+	for customer_number: int in range(9, 15):
+		await _complete_real_movement_sale(
+			screen,
+			"customer_%d" % customer_number
+		)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_staff_hire_pad().position
+		)
+	)
+	growth_frames = await _wait_for_condition(
+		func() -> bool:
+			return GameManager.is_server_hired(),
+		240
+	)
+	var elapsed_seconds: float = (
+		service_started_at
+		- float(GameManager.state["service_time_remaining"])
+	)
+	Engine.time_scale = 1.0
+
+	assert_lte(growth_frames, 240)
+	assert_lte(
+		elapsed_seconds,
+		5.0 * 60.0,
+		"first staff hire took %.2f seconds" % elapsed_seconds
+	)
+	assert_eq(GameManager.get_mackerel_station_level(), 2)
+	assert_eq(GameManager.get_unlocked_seat_count(), 2)
+	assert_true(GameManager.is_server_hired())
+	assert_eq(GameManager.state["currency"], 13)
+	assert_eq(
+		GameManager.state["day_stats"]["plates_sold"]["mackerel"],
+		14
+	)
+	assert_gt(GameManager.state["service_time_remaining"], 0.0)
 
 
 func test_touch_tap_sets_world_destination() -> void:
