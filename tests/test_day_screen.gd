@@ -311,6 +311,46 @@ func test_timer_expiry_keeps_existing_order_playable() -> void:
 	assert_true(GameManager.complete_active_order_craft())
 
 
+func test_empty_closed_service_opens_settlement_summary() -> void:
+	GameManager.state["service_time_remaining"] = 0.0
+	GameManager.state["day_runtime"]["accepting_customers"] = false
+	GameManager.state["day_stats"]["plates_sold"]["mackerel"] = 2
+	GameManager.state["day_stats"]["revenue"] = 12
+	GameManager.state["day_stats"]["departed_customers"] = 1
+
+	var screen: DayScreen = await _create_screen()
+	await wait_process_frames(1)
+
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SETTLEMENT)
+	assert_true(screen.get_settlement_panel().visible)
+	var summary_text: String = screen.get_node(
+		"FixedUI/SettlementPanel/Content/SummaryLabel"
+	).text
+	assert_string_contains(summary_text, "총매출  12문")
+	assert_string_contains(summary_text, "판매 접시  2개")
+	assert_string_contains(summary_text, "떠난 손님  1명")
+	assert_string_contains(summary_text, "밥 20 / 고등어 20")
+	assert_string_contains(summary_text, "폐기 원가  40.0문")
+	assert_false(screen.get_player().has_destination())
+	screen._input(_touch_event(1, Vector2(400.0, 600.0), true))
+	screen._input(_touch_event(1, Vector2(400.0, 600.0), false))
+	assert_false(screen.get_player().has_destination())
+
+
+func test_settlement_continue_requests_dawn_without_signal_argument() -> void:
+	GameManager.state["service_time_remaining"] = 0.0
+	GameManager.state["day_runtime"]["accepting_customers"] = false
+	var screen: DayScreen = await _create_screen()
+	await wait_process_frames(1)
+	watch_signals(screen)
+
+	screen.get_settlement_continue_button().pressed.emit()
+
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAWN)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_MARKET)
+	assert_signal_emitted(screen, "screen_change_requested")
+
+
 func test_initial_customer_reserves_seat_and_shows_order() -> void:
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (

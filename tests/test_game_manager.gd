@@ -112,6 +112,103 @@ func test_closing_dismisses_queued_customer_as_departed() -> void:
 	assert_false(GameManager.dismiss_queued_customer(customer_id))
 
 
+func test_settlement_finalizes_sales_departures_and_waste_once() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["service_time_remaining"] = 0.0
+	GameManager.state["day_runtime"]["accepting_customers"] = false
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 4,
+		"mackerel": 3,
+		"egg": 2,
+	}
+	GameManager.state["inventory"]["raw"] = {
+		"rice": 1,
+		"mackerel": 2,
+		"egg": 3,
+	}
+	GameManager.state["day_stats"]["plates_sold"] = {
+		"mackerel": 2,
+		"egg": 1,
+	}
+	GameManager.state["day_stats"]["revenue"] = 27
+	GameManager.state["day_stats"]["departed_customers"] = 2
+
+	assert_true(GameManager.try_begin_settlement())
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SETTLEMENT)
+	var summary: Dictionary = GameManager.get_settlement_summary()
+	assert_eq(summary["revenue"], 27)
+	assert_eq(summary["total_plates"], 3)
+	assert_eq(summary["plates_sold"]["mackerel"], 2)
+	assert_eq(summary["plates_sold"]["egg"], 1)
+	assert_eq(summary["departed_customers"], 2)
+	assert_eq(
+		summary["waste"],
+		{
+			"rice": 5,
+			"mackerel": 5,
+			"egg": 5,
+		}
+	)
+	assert_almost_eq(summary["waste_cost"], 18.0, 0.0001)
+	assert_eq(
+		GameManager.state["inventory"]["ready"],
+		{
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		}
+	)
+	assert_eq(
+		GameManager.state["inventory"]["raw"],
+		{
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		}
+	)
+	assert_eq(
+		GameManager.state["totals"]["waste"],
+		{
+			"rice": 5,
+			"mackerel": 5,
+			"egg": 5,
+		}
+	)
+	assert_false(GameManager.try_begin_settlement())
+	assert_eq(
+		GameManager.state["totals"]["waste"]["rice"],
+		5
+	)
+
+	assert_true(GameManager.request_dawn_after_settlement())
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAWN)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_MARKET)
+	assert_false(GameManager.request_dawn_after_settlement())
+
+
+func test_settlement_waits_until_existing_order_is_cleared() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	GameManager.state["service_time_remaining"] = 0.0
+	GameManager.state["day_runtime"]["accepting_customers"] = false
+
+	assert_false(GameManager.try_begin_settlement())
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 20)
+
+
 func test_order_requires_mackerel_then_rice_before_crafting() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var customer_id: String = GameManager.create_day_customer()

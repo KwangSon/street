@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, a repeating customer loop, ordered mackerel preparation, matching-order serving, eating, payment collection, exit, the mackerel station Lv.2 upgrade, the second-seat purchase, one server hire, automated serving, the service timer, last-order handling, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, a repeating customer loop, ordered mackerel preparation, matching-order serving, eating, payment collection, exit, the mackerel station Lv.2 upgrade, the second-seat purchase, one server hire, automated serving, the service timer, last-order handling, settlement aggregation and UI, and GUT coverage for this foundation.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -51,6 +51,7 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - The second-seat pad charges 24 mon after a one-second stay. Only then does `DayScreen` install Seat 2, update collision and navigation, and let `DayCustomerManager` assign its next waiting customer.
 - The staff pad charges 45 mon after a one-second stay and allows only one server. The server reserves one finished plate in `GameManager.state`, walks to the station to collect it, verifies the matching customer, and serves it automatically. The player remains responsible for preparation and payment collection.
 - `GameManager.tick_service_time()` owns the authoritative countdown. At zero, `DayCustomerManager` stops spawning, dismisses only customers who have not ordered, and leaves existing orders playable through payment and exit.
+- Settlement begins only after the timer is zero and customers, orders, payments, carried plates, and station plates are all cleared. `GameManager` snapshots sales and departures, discards remaining ready and raw inventory once, calculates waste cost, and changes the day phase to `settlement`; `DayScreen` only renders that state.
 - Daytime mackerel production is strict: accept one customer order, collect one mackerel at the ingredient box, collect one rice at the rice pot, then work at the mackerel station. Approaching the station without those steps must not craft anything.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.

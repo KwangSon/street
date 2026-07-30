@@ -35,6 +35,11 @@ const MACKEREL_STATION_P0_MAX_LEVEL: int = 2
 const SECOND_SEAT_COST: int = 24
 const P0_MAX_SEATS: int = 2
 const SERVER_HIRE_COST: int = 45
+const MATERIAL_COST_PER_PORTION: Dictionary = {
+	"rice": 0.8,
+	"mackerel": 1.2,
+	"egg": 1.6,
+}
 const MACKEREL_STATION_LEVELS: Dictionary = {
 	1: {
 		"craft_duration": 3.2,
@@ -132,6 +137,7 @@ func create_default_game_state() -> Dictionary:
 				"mackerel": 0,
 				"egg": 0,
 			},
+			"waste_cost": 0.0,
 		},
 		"totals": {
 			"plates_sold": {
@@ -262,6 +268,92 @@ func dismiss_queued_customer(customer_id: String) -> bool:
 	day_stats["departed_customers"] = (
 		int(day_stats.get("departed_customers", 0)) + 1
 	)
+	state_changed.emit()
+	return true
+
+
+func try_begin_settlement() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SERVICE
+		or float(state.get("service_time_remaining", 0.0)) > 0.0
+		or not _is_day_service_drained()
+	):
+		return false
+
+	var waste_result: Dictionary = _discard_remaining_inventory()
+	var day_stats: Dictionary = state.get("day_stats", {})
+	if not state.has("day_stats"):
+		state["day_stats"] = day_stats
+	day_stats["waste"] = waste_result["waste"].duplicate(true)
+	day_stats["waste_cost"] = float(waste_result["cost"])
+
+	var plates_sold_value: Variant = day_stats.get(
+		"plates_sold",
+		{}
+	)
+	var plates_sold: Dictionary = (
+		plates_sold_value
+		if plates_sold_value is Dictionary
+		else {}
+	)
+	var total_plates: int = 0
+	for plate_count: Variant in plates_sold.values():
+		total_plates += int(plate_count)
+
+	var totals: Dictionary = state.get("totals", {})
+	if not state.has("totals"):
+		state["totals"] = totals
+	var total_waste_value: Variant = totals.get("waste", {})
+	var total_waste: Dictionary = (
+		total_waste_value
+		if total_waste_value is Dictionary
+		else {}
+	)
+	totals["waste"] = total_waste
+	for material_id: String in MATERIAL_COST_PER_PORTION.keys():
+		total_waste[material_id] = (
+			int(total_waste.get(material_id, 0))
+			+ int(waste_result["waste"].get(material_id, 0))
+		)
+
+	state["settlement_summary"] = {
+		"day": int(state.get("day", 1)),
+		"revenue": int(day_stats.get("revenue", 0)),
+		"total_plates": total_plates,
+		"plates_sold": plates_sold.duplicate(true),
+		"departed_customers": int(
+			day_stats.get("departed_customers", 0)
+		),
+		"waste": waste_result["waste"].duplicate(true),
+		"waste_cost": float(waste_result["cost"]),
+		"next_customer_min": 18,
+		"next_customer_max": 22,
+	}
+	state["day_runtime"]["accepting_customers"] = false
+	state["phase"] = PHASE_SETTLEMENT
+	state_changed.emit()
+	return true
+
+
+func get_settlement_summary() -> Dictionary:
+	var summary_value: Variant = state.get(
+		"settlement_summary",
+		{}
+	)
+	if not summary_value is Dictionary:
+		return {}
+	return Dictionary(summary_value).duplicate(true)
+
+
+func request_dawn_after_settlement() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SETTLEMENT
+	):
+		return false
+	state["screen"] = SCREEN_DAWN
+	state["phase"] = PHASE_MARKET
 	state_changed.emit()
 	return true
 
@@ -1047,6 +1139,64 @@ func _close_customer_entry() -> void:
 		return
 	day_runtime["accepting_customers"] = false
 	state_changed.emit()
+
+
+func _is_day_service_drained() -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	return (
+		day_runtime["customers"].is_empty()
+		and day_runtime["customer_queue"].is_empty()
+		and day_runtime["seat_assignments"].is_empty()
+		and day_runtime["orders"].is_empty()
+		and day_runtime["payments"].is_empty()
+		and day_runtime["station_item"].is_empty()
+		and day_runtime["server_carried_item"].is_empty()
+		and not is_player_carrying_item()
+	)
+
+
+func _discard_remaining_inventory() -> Dictionary:
+	var waste: Dictionary = {
+		"rice": 0,
+		"mackerel": 0,
+		"egg": 0,
+	}
+	var inventory_value: Variant = state.get("inventory", {})
+	if not inventory_value is Dictionary:
+		return {
+			"waste": waste,
+			"cost": 0.0,
+		}
+	var inventory: Dictionary = inventory_value
+	for inventory_group_id: String in ["ready", "raw"]:
+		var group_value: Variant = inventory.get(
+			inventory_group_id,
+			{}
+		)
+		if not group_value is Dictionary:
+			continue
+		var inventory_group: Dictionary = group_value
+		for material_id: String in MATERIAL_COST_PER_PORTION.keys():
+			waste[material_id] = (
+				int(waste[material_id])
+				+ maxi(
+					0,
+					int(inventory_group.get(material_id, 0))
+				)
+			)
+			inventory_group[material_id] = 0
+
+	var waste_cost: float = 0.0
+	for material_id: String in MATERIAL_COST_PER_PORTION.keys():
+		waste_cost += (
+			float(waste[material_id])
+			* float(MATERIAL_COST_PER_PORTION[material_id])
+		)
+	return {
+		"waste": waste,
+		"cost": waste_cost,
+	}
 
 
 func _create_default_day_runtime() -> Dictionary:

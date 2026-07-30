@@ -48,6 +48,9 @@ const MAP_COLOR: Color = Color("b9b7ad")
 const GRID_COLOR: Color = Color("aaa89f")
 const HUD_COLOR: Color = Color("35291f")
 const HUD_TEXT_COLOR: Color = Color("fff4d6")
+const SETTLEMENT_BACKGROUND_COLOR: Color = Color("2b211b")
+const SETTLEMENT_PANEL_COLOR: Color = Color("ead8b7")
+const SETTLEMENT_TEXT_COLOR: Color = Color("35291f")
 const SEAT_2_ID: String = "seat_2"
 const SEAT_2_POSITION: Vector2 = Vector2(900.0, 920.0)
 const SEAT_2_TARGET: Vector2 = Vector2(900.0, 830.0)
@@ -129,6 +132,10 @@ var _server: DayServer
 var _inventory_label: Label
 var _currency_label: Label
 var _time_label: Label
+var _settlement_panel: ColorRect
+var _settlement_summary_label: Label
+var _settlement_progress_label: Label
+var _settlement_continue_button: Button
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -156,6 +163,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	GameManager.tick_service_time(delta)
+	GameManager.try_begin_settlement()
 
 
 func _exit_tree() -> void:
@@ -165,6 +173,13 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if (
+		String(GameManager.state.get("screen", ""))
+		!= GameManager.SCREEN_DAY
+		or String(GameManager.state.get("phase", ""))
+		!= GameManager.PHASE_SERVICE
+	):
+		return
 	if event is InputEventScreenTouch:
 		var touch_event: InputEventScreenTouch = event
 		if touch_event.pressed:
@@ -248,6 +263,14 @@ func get_staff_hire_pad() -> DayStaffHirePad:
 
 func get_server() -> DayServer:
 	return _server
+
+
+func get_settlement_panel() -> ColorRect:
+	return _settlement_panel
+
+
+func get_settlement_continue_button() -> Button:
+	return _settlement_continue_button
 
 
 func get_play_area_rect() -> Rect2:
@@ -554,6 +577,7 @@ func _build_fixed_ui() -> void:
 	add_child(fixed_ui)
 
 	_add_hud(fixed_ui)
+	_add_settlement_ui(fixed_ui)
 
 
 func _add_hud(fixed_ui: CanvasLayer) -> void:
@@ -625,6 +649,91 @@ func _add_hud_label(
 	label.add_theme_font_size_override("font_size", font_size)
 	parent.add_child(label)
 	return label
+
+
+func _add_settlement_ui(fixed_ui: CanvasLayer) -> void:
+	_settlement_panel = ColorRect.new()
+	_settlement_panel.name = "SettlementPanel"
+	_settlement_panel.position = Vector2.ZERO
+	_settlement_panel.size = VIEWPORT_SIZE
+	_settlement_panel.color = SETTLEMENT_BACKGROUND_COLOR
+	_settlement_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	fixed_ui.add_child(_settlement_panel)
+
+	var content: ColorRect = ColorRect.new()
+	content.name = "Content"
+	content.position = Vector2(54.0, 84.0)
+	content.size = Vector2(612.0, 1080.0)
+	content.color = SETTLEMENT_PANEL_COLOR
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_settlement_panel.add_child(content)
+
+	var title: Label = Label.new()
+	title.name = "TitleLabel"
+	title.position = Vector2(30.0, 34.0)
+	title.size = Vector2(552.0, 70.0)
+	title.text = "오늘의 영업 정산"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	title.add_theme_font_size_override("font_size", 36)
+	content.add_child(title)
+
+	_settlement_summary_label = Label.new()
+	_settlement_summary_label.name = "SummaryLabel"
+	_settlement_summary_label.position = Vector2(54.0, 132.0)
+	_settlement_summary_label.size = Vector2(504.0, 570.0)
+	_settlement_summary_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_TOP
+	)
+	_settlement_summary_label.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	_settlement_summary_label.add_theme_font_size_override(
+		"font_size",
+		25
+	)
+	content.add_child(_settlement_summary_label)
+
+	_settlement_progress_label = Label.new()
+	_settlement_progress_label.name = "ProgressLabel"
+	_settlement_progress_label.position = Vector2(54.0, 724.0)
+	_settlement_progress_label.size = Vector2(504.0, 170.0)
+	_settlement_progress_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+	_settlement_progress_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+	_settlement_progress_label.add_theme_color_override(
+		"font_color",
+		SETTLEMENT_TEXT_COLOR
+	)
+	_settlement_progress_label.add_theme_font_size_override(
+		"font_size",
+		22
+	)
+	content.add_child(_settlement_progress_label)
+
+	_settlement_continue_button = Button.new()
+	_settlement_continue_button.name = "ContinueButton"
+	_settlement_continue_button.position = Vector2(66.0, 930.0)
+	_settlement_continue_button.size = Vector2(480.0, 92.0)
+	_settlement_continue_button.text = "새벽 장보기로"
+	_settlement_continue_button.add_theme_font_size_override(
+		"font_size",
+		27
+	)
+	_settlement_continue_button.pressed.connect(
+		_on_settlement_continue_pressed
+	)
+	content.add_child(_settlement_continue_button)
+
+	_refresh_settlement_ui()
 
 
 func _begin_pointer(pointer_id: int, position: Vector2) -> void:
@@ -701,6 +810,7 @@ func _on_game_state_changed() -> void:
 	_install_server_if_hired()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
+	_refresh_settlement_ui()
 	if _player != null:
 		_player.set_carried_item(GameManager.get_carried_item())
 
@@ -708,6 +818,11 @@ func _on_game_state_changed() -> void:
 func _on_service_time_changed(time_remaining: float) -> void:
 	if _time_label != null:
 		_time_label.text = _format_time(time_remaining)
+
+
+func _on_settlement_continue_pressed() -> void:
+	if GameManager.request_dawn_after_settlement():
+		screen_change_requested.emit()
 
 
 func _on_customer_interactable_created(
@@ -791,6 +906,69 @@ func _refresh_currency_hud() -> void:
 	_currency_label.text = "%d문" % int(
 		GameManager.state.get("currency", 0)
 	)
+
+
+func _refresh_settlement_ui() -> void:
+	if _settlement_panel == null:
+		return
+	var is_settlement: bool = (
+		String(GameManager.state.get("screen", ""))
+		== GameManager.SCREEN_DAY
+		and String(GameManager.state.get("phase", ""))
+		== GameManager.PHASE_SETTLEMENT
+	)
+	_settlement_panel.visible = is_settlement
+	if not is_settlement:
+		return
+	var summary: Dictionary = GameManager.get_settlement_summary()
+	var plates_sold_value: Variant = summary.get(
+		"plates_sold",
+		{}
+	)
+	var plates_sold: Dictionary = (
+		plates_sold_value
+		if plates_sold_value is Dictionary
+		else {}
+	)
+	var waste_value: Variant = summary.get("waste", {})
+	var waste: Dictionary = (
+		waste_value
+		if waste_value is Dictionary
+		else {}
+	)
+	_settlement_summary_label.text = (
+		"Day %d\n\n"
+		+ "총매출  %d문\n"
+		+ "판매 접시  %d개\n"
+		+ "  · 고등어 %d개\n"
+		+ "  · 계란 %d개\n\n"
+		+ "기다리다 떠난 손님  %d명\n\n"
+		+ "폐기 재료\n"
+		+ "  · 밥 %d / 고등어 %d / 계란 %d\n"
+		+ "폐기 원가  %.1f문"
+	) % [
+		int(summary.get("day", 1)),
+		int(summary.get("revenue", 0)),
+		int(summary.get("total_plates", 0)),
+		int(plates_sold.get("mackerel", 0)),
+		int(plates_sold.get("egg", 0)),
+		int(summary.get("departed_customers", 0)),
+		int(waste.get("rice", 0)),
+		int(waste.get("mackerel", 0)),
+		int(waste.get("egg", 0)),
+		float(summary.get("waste_cost", 0.0)),
+	]
+	_settlement_progress_label.text = (
+		"오늘 성장: 조리대 Lv.%d · 좌석 %d · 점원 %s\n\n"
+		+ "내일 약 %d~%d명 예상\n"
+		+ "내일 장사할 재료를 사러 갑니다"
+	) % [
+		GameManager.get_mackerel_station_level(),
+		GameManager.get_unlocked_seat_count(),
+		"고용" if GameManager.is_server_hired() else "미고용",
+		int(summary.get("next_customer_min", 18)),
+		int(summary.get("next_customer_max", 22)),
+	]
 
 
 func _get_ready_inventory() -> Dictionary:
