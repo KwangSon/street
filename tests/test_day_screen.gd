@@ -41,6 +41,8 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_null(screen.get_server())
 	assert_null(screen.get_node_or_null("World/Seat2"))
 	assert_not_null(screen.get_node("FixedUI/HUD"))
+	assert_not_null(screen.get_early_close_button())
+	assert_eq(screen.get_early_close_button().text, "조기 마감")
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
 
 
@@ -255,7 +257,7 @@ func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
 	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
 
 
-func test_timer_expiry_stops_spawns_and_dismisses_queue() -> void:
+func test_timer_expiry_stops_spawns_and_dismisses_unordered_customers() -> void:
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (
 		screen.get_customer_manager()
@@ -272,7 +274,7 @@ func test_timer_expiry_stops_spawns_and_dismisses_queue() -> void:
 	assert_true(GameManager.get_customer_queue().is_empty())
 	assert_eq(
 		GameManager.state["day_stats"]["departed_customers"],
-		3
+		4
 	)
 	assert_eq(
 		screen.get_node("FixedUI/HUD/TimeLabel").text,
@@ -309,6 +311,40 @@ func test_timer_expiry_keeps_existing_order_playable() -> void:
 	assert_true(GameManager.try_collect_rice_for_order())
 	assert_true(GameManager.try_start_active_order_craft())
 	assert_true(GameManager.complete_active_order_craft())
+
+
+func test_early_close_requires_two_second_hold() -> void:
+	var screen: DayScreen = await _create_screen()
+	var close_button: Button = screen.get_early_close_button()
+
+	close_button.button_down.emit()
+	await wait_physics_frames(60)
+	close_button.button_up.emit()
+
+	assert_true(GameManager.is_accepting_customers())
+	assert_gt(GameManager.state["service_time_remaining"], 0.0)
+	assert_eq(screen.get_early_close_hold_progress(), 0.0)
+	assert_eq(close_button.text, "조기 마감")
+
+	close_button.button_down.emit()
+	await wait_physics_frames(125)
+
+	assert_false(GameManager.is_accepting_customers())
+	assert_eq(GameManager.state["service_time_remaining"], 0.0)
+	assert_true(close_button.disabled)
+	assert_eq(close_button.text, "마감 대기")
+
+
+func test_empty_inventory_automatically_opens_settlement() -> void:
+	GameManager.state["inventory"]["ready"]["rice"] = 0
+	GameManager.state["inventory"]["ready"]["mackerel"] = 0
+
+	var screen: DayScreen = await _create_screen()
+	await wait_process_frames(2)
+
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SETTLEMENT)
+	assert_true(screen.get_settlement_panel().visible)
+	assert_false(GameManager.is_accepting_customers())
 
 
 func test_empty_closed_service_opens_settlement_summary() -> void:

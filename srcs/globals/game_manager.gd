@@ -255,6 +255,82 @@ func is_accepting_customers() -> bool:
 	)
 
 
+func request_early_close() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SERVICE
+		or not is_accepting_customers()
+	):
+		return false
+	state["service_time_remaining"] = 0.0
+	service_time_changed.emit(0.0)
+	_close_customer_entry()
+	return true
+
+
+func try_close_exhausted_service() -> bool:
+	if (
+		not is_accepting_customers()
+		or _has_saleable_ready_portion()
+	):
+		return false
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	if (
+		not day_runtime["orders"].is_empty()
+		or not day_runtime["station_item"].is_empty()
+		or not day_runtime["server_carried_item"].is_empty()
+		or is_player_carrying_item()
+	):
+		return false
+	return request_early_close()
+
+
+func dismiss_unordered_customer(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	var orders: Dictionary = day_runtime["orders"]
+	if (
+		not customers.has(customer_id)
+		or orders.has(customer_id)
+	):
+		return false
+	var customer: Dictionary = customers[customer_id]
+	var customer_state: String = String(
+		customer.get("state", "")
+	)
+	if customer_state not in [
+		CUSTOMER_ENTERING,
+		CUSTOMER_WAITING_IN_QUEUE,
+		CUSTOMER_MOVING_TO_SEAT,
+		CUSTOMER_WAITING_FOR_ORDER,
+	]:
+		return false
+
+	day_runtime["customer_queue"].erase(customer_id)
+	var seat_id: String = String(customer.get("seat_id", ""))
+	var seat_assignments: Dictionary = day_runtime[
+		"seat_assignments"
+	]
+	if (
+		not seat_id.is_empty()
+		and String(seat_assignments.get(seat_id, ""))
+		== customer_id
+	):
+		seat_assignments.erase(seat_id)
+	customer["state"] = CUSTOMER_LEAVING
+	customer["seat_id"] = ""
+	var day_stats: Dictionary = state.get("day_stats", {})
+	if not state.has("day_stats"):
+		state["day_stats"] = day_stats
+	day_stats["departed_customers"] = (
+		int(day_stats.get("departed_customers", 0)) + 1
+	)
+	state_changed.emit()
+	return true
+
+
 func dismiss_queued_customer(customer_id: String) -> bool:
 	_ensure_day_runtime_state()
 	var day_runtime: Dictionary = state["day_runtime"]
@@ -267,17 +343,7 @@ func dismiss_queued_customer(customer_id: String) -> bool:
 		!= CUSTOMER_WAITING_IN_QUEUE
 	):
 		return false
-
-	customer["state"] = CUSTOMER_LEAVING
-	day_runtime["customer_queue"].erase(customer_id)
-	var day_stats: Dictionary = state.get("day_stats", {})
-	if not state.has("day_stats"):
-		state["day_stats"] = day_stats
-	day_stats["departed_customers"] = (
-		int(day_stats.get("departed_customers", 0)) + 1
-	)
-	state_changed.emit()
-	return true
+	return dismiss_unordered_customer(customer_id)
 
 
 func try_begin_settlement() -> bool:
@@ -1774,6 +1840,18 @@ func _get_ready_inventory() -> Dictionary:
 	if not ready_value is Dictionary:
 		return {}
 	return ready_value
+
+
+func _has_saleable_ready_portion() -> bool:
+	var ready_inventory: Dictionary = _get_ready_inventory()
+	if int(ready_inventory.get("rice", 0)) <= 0:
+		return false
+	if int(ready_inventory.get("mackerel", 0)) > 0:
+		return true
+	return (
+		_is_menu_unlocked(MENU_EGG)
+		and int(ready_inventory.get("egg", 0)) > 0
+	)
 
 
 func _get_raw_inventory() -> Dictionary:

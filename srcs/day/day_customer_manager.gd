@@ -19,7 +19,7 @@ var _queue_targets: Array[Vector2] = []
 var _customers: Dictionary = {}
 var _payments: Dictionary = {}
 var _spawn_time_remaining: float = DEFAULT_SPAWN_INTERVAL
-var _closing_queue: bool = false
+var _dismissing_unordered_customers: bool = false
 
 
 func configure(
@@ -41,7 +41,7 @@ func _ready() -> void:
 	if GameManager.is_accepting_customers():
 		call_deferred("_spawn_customer")
 	else:
-		call_deferred("_dismiss_waiting_queue")
+		call_deferred("_dismiss_unordered_customers")
 
 
 func _process(delta: float) -> void:
@@ -271,20 +271,20 @@ func _on_customer_exited(customer_id: String) -> void:
 
 func _on_game_state_changed() -> void:
 	if not GameManager.is_accepting_customers():
-		_dismiss_waiting_queue()
+		_dismiss_unordered_customers()
 
 
-func _dismiss_waiting_queue() -> void:
-	if _closing_queue:
+func _dismiss_unordered_customers() -> void:
+	if _dismissing_unordered_customers:
 		return
-	_closing_queue = true
-	var queued_customer_ids: Array[String] = (
-		GameManager.get_customer_queue()
-	)
-	for customer_id: String in queued_customer_ids:
-		if not GameManager.dismiss_queued_customer(customer_id):
+	_dismissing_unordered_customers = true
+	var customer_ids: Array[String] = []
+	for customer_id_value: Variant in _customers.keys():
+		customer_ids.append(String(customer_id_value))
+	for customer_id: String in customer_ids:
+		if not GameManager.dismiss_unordered_customer(customer_id):
 			continue
 		var customer: DayCustomer = get_customer(customer_id)
 		if customer != null:
 			customer.start_leaving(_entrance_position)
-	_closing_queue = false
+	_dismissing_unordered_customers = false

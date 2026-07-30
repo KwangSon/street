@@ -39,6 +39,7 @@ const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
 const DEFAULT_CAMERA_POSITION: Vector2 = Vector2(360.0, 640.0)
 const PLAYER_START_POSITION: Vector2 = Vector2(360.0, 620.0)
 const DRAG_THRESHOLD: float = 8.0
+const EARLY_CLOSE_HOLD_DURATION: float = 2.0
 
 const HUD_HEIGHT: float = 112.0
 const MOUSE_POINTER_ID: int = -1
@@ -132,6 +133,7 @@ var _server: DayServer
 var _inventory_label: Label
 var _currency_label: Label
 var _time_label: Label
+var _early_close_button: Button
 var _settlement_panel: ColorRect
 var _settlement_summary_label: Label
 var _settlement_progress_label: Label
@@ -140,6 +142,8 @@ var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
 var _gesture_is_drag: bool = false
+var _early_close_holding: bool = false
+var _early_close_progress: float = 0.0
 
 
 func _ready() -> void:
@@ -163,6 +167,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	GameManager.tick_service_time(delta)
+	GameManager.try_close_exhausted_service()
+	_tick_early_close_hold(delta)
 	GameManager.try_begin_settlement()
 
 
@@ -170,6 +176,8 @@ func _exit_tree() -> void:
 	if _player != null:
 		_player.clear_path()
 	_active_pointer_id = NO_POINTER_ID
+	_early_close_holding = false
+	_early_close_progress = 0.0
 
 
 func _input(event: InputEvent) -> void:
@@ -263,6 +271,14 @@ func get_staff_hire_pad() -> DayStaffHirePad:
 
 func get_server() -> DayServer:
 	return _server
+
+
+func get_early_close_button() -> Button:
+	return _early_close_button
+
+
+func get_early_close_hold_progress() -> float:
+	return _early_close_progress
 
 
 func get_settlement_panel() -> ColorRect:
@@ -629,6 +645,21 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 		22
 	)
 
+	_early_close_button = Button.new()
+	_early_close_button.name = "EarlyCloseButton"
+	_early_close_button.position = Vector2(560.0, 62.0)
+	_early_close_button.size = Vector2(136.0, 46.0)
+	_early_close_button.focus_mode = Control.FOCUS_NONE
+	_early_close_button.add_theme_font_size_override("font_size", 14)
+	_early_close_button.button_down.connect(
+		_on_early_close_button_down
+	)
+	_early_close_button.button_up.connect(
+		_on_early_close_button_up
+	)
+	hud.add_child(_early_close_button)
+	_refresh_early_close_button()
+
 
 func _add_hud_label(
 	parent: Control,
@@ -810,6 +841,7 @@ func _on_game_state_changed() -> void:
 	_install_server_if_hired()
 	_refresh_inventory_hud()
 	_refresh_currency_hud()
+	_refresh_early_close_button()
 	_refresh_settlement_ui()
 	if _player != null:
 		_player.set_carried_item(GameManager.get_carried_item())
@@ -818,6 +850,69 @@ func _on_game_state_changed() -> void:
 func _on_service_time_changed(time_remaining: float) -> void:
 	if _time_label != null:
 		_time_label.text = _format_time(time_remaining)
+	_refresh_early_close_button()
+
+
+func _on_early_close_button_down() -> void:
+	if not GameManager.is_accepting_customers():
+		return
+	_early_close_holding = true
+	_early_close_progress = 0.0
+	_refresh_early_close_button()
+
+
+func _on_early_close_button_up() -> void:
+	if not _early_close_holding:
+		return
+	_early_close_holding = false
+	_early_close_progress = 0.0
+	_refresh_early_close_button()
+
+
+func _tick_early_close_hold(delta: float) -> void:
+	if not _early_close_holding:
+		return
+	if not GameManager.is_accepting_customers():
+		_early_close_holding = false
+		_early_close_progress = 0.0
+		_refresh_early_close_button()
+		return
+	_early_close_progress = minf(
+		_early_close_progress + maxf(delta, 0.0),
+		EARLY_CLOSE_HOLD_DURATION
+	)
+	if _early_close_progress >= EARLY_CLOSE_HOLD_DURATION:
+		_early_close_holding = false
+		GameManager.request_early_close()
+	_refresh_early_close_button()
+
+
+func _refresh_early_close_button() -> void:
+	if _early_close_button == null:
+		return
+	var is_service: bool = (
+		String(GameManager.state.get("screen", ""))
+		== GameManager.SCREEN_DAY
+		and String(GameManager.state.get("phase", ""))
+		== GameManager.PHASE_SERVICE
+	)
+	_early_close_button.visible = is_service
+	if not is_service:
+		_early_close_holding = false
+		_early_close_progress = 0.0
+		return
+	var is_accepting: bool = GameManager.is_accepting_customers()
+	_early_close_button.disabled = not is_accepting
+	if not is_accepting:
+		_early_close_button.text = "마감 대기"
+	elif _early_close_holding:
+		var remaining: float = maxf(
+			EARLY_CLOSE_HOLD_DURATION - _early_close_progress,
+			0.0
+		)
+		_early_close_button.text = "마감 %.1f초" % remaining
+	else:
+		_early_close_button.text = "조기 마감"
 
 
 func _on_settlement_continue_pressed() -> void:

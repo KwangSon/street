@@ -94,6 +94,71 @@ func test_service_timer_does_not_run_outside_day_service() -> void:
 	assert_eq(GameManager.state["service_time_remaining"], 330.0)
 
 
+func test_early_close_sets_timer_to_zero_and_closes_entry() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+
+	assert_true(GameManager.request_early_close())
+	assert_eq(GameManager.state["service_time_remaining"], 0.0)
+	assert_false(GameManager.is_accepting_customers())
+	assert_false(GameManager.request_early_close())
+
+
+func test_exhausted_service_closes_only_without_active_order() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var ready_inventory: Dictionary = (
+		GameManager.state["inventory"]["ready"]
+	)
+	ready_inventory["rice"] = 0
+	ready_inventory["mackerel"] = 0
+
+	assert_true(GameManager.try_close_exhausted_service())
+	assert_false(GameManager.is_accepting_customers())
+
+	GameManager.state = GameManager.create_default_game_state()
+	ready_inventory = GameManager.state["inventory"]["ready"]
+	ready_inventory["rice"] = 0
+	ready_inventory["mackerel"] = 0
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+
+	assert_false(GameManager.try_close_exhausted_service())
+	assert_true(GameManager.is_accepting_customers())
+	assert_eq(GameManager.state["service_time_remaining"], 330.0)
+
+
+func test_dismissing_unordered_customer_releases_reserved_seat() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+
+	assert_true(GameManager.dismiss_unordered_customer(customer_id))
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_LEAVING
+	)
+	assert_true(
+		GameManager.state["day_runtime"]["seat_assignments"].is_empty()
+	)
+	assert_eq(GameManager.state["day_stats"]["departed_customers"], 1)
+	assert_false(GameManager.dismiss_unordered_customer(customer_id))
+
+
 func test_closing_dismisses_queued_customer_as_departed() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var customer_id: String = GameManager.create_day_customer()
