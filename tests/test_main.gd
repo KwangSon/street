@@ -4,6 +4,9 @@ const MainScript: Script = preload("res://srcs/main.gd")
 const DayScreenScript: Script = preload(
 	"res://srcs/screens/day_screen.gd"
 )
+const DawnScreenScript: Script = preload(
+	"res://srcs/screens/dawn_screen.gd"
+)
 const ScreenStubScript: Script = preload(
 	"res://tests/fixtures/screen_stub.gd"
 )
@@ -54,6 +57,20 @@ func test_main_creates_day_screen_after_loading() -> void:
 	await wait_process_frames(3)
 
 	assert_eq(main.get_current_screen().get_script(), DayScreenScript)
+	assert_eq(main.get_child_count(), 1)
+
+
+func test_main_creates_dawn_screen_from_market_state() -> void:
+	var saved_state: Dictionary = GameManager.create_default_game_state()
+	saved_state["screen"] = GameManager.SCREEN_DAWN
+	saved_state["phase"] = GameManager.PHASE_MARKET
+	assert_eq(SaveManager.save_game_state(saved_state, TEST_PATH), OK)
+
+	var main: Node = _create_main()
+	add_child_autofree(main)
+	await wait_process_frames(3)
+
+	assert_eq(main.get_current_screen().get_script(), DawnScreenScript)
 	assert_eq(main.get_child_count(), 1)
 
 

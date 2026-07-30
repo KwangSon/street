@@ -183,7 +183,77 @@ func test_settlement_finalizes_sales_departures_and_waste_once() -> void:
 	assert_true(GameManager.request_dawn_after_settlement())
 	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAWN)
 	assert_eq(GameManager.state["phase"], GameManager.PHASE_MARKET)
+	assert_eq(
+		GameManager.get_market_purchases(),
+		{
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		}
+	)
 	assert_false(GameManager.request_dawn_after_settlement())
+
+
+func test_market_bundles_purchase_and_refund_exactly() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["screen"] = GameManager.SCREEN_DAWN
+	GameManager.state["phase"] = GameManager.PHASE_MARKET
+	GameManager.state["currency"] = 10
+	GameManager.state["inventory"]["raw"] = {
+		"rice": 0,
+		"mackerel": 0,
+		"egg": 0,
+	}
+	GameManager.ensure_dawn_runtime_state()
+
+	assert_true(GameManager.try_purchase_market_bundle("rice"))
+	assert_eq(GameManager.state["currency"], 6)
+	assert_eq(GameManager.state["inventory"]["raw"]["rice"], 5)
+	assert_true(GameManager.try_purchase_market_bundle("mackerel"))
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(
+		GameManager.state["inventory"]["raw"]["mackerel"],
+		5
+	)
+	assert_false(GameManager.try_purchase_market_bundle("rice"))
+	assert_false(GameManager.try_purchase_market_bundle("unknown"))
+	assert_eq(
+		GameManager.get_market_purchases(),
+		{
+			"rice": 5,
+			"mackerel": 5,
+			"egg": 0,
+		}
+	)
+
+	assert_true(GameManager.refund_market_purchases())
+	assert_eq(GameManager.state["currency"], 10)
+	assert_eq(GameManager.state["inventory"]["raw"]["rice"], 0)
+	assert_eq(
+		GameManager.state["inventory"]["raw"]["mackerel"],
+		0
+	)
+	assert_eq(
+		GameManager.get_market_purchases(),
+		{
+			"rice": 0,
+			"mackerel": 0,
+			"egg": 0,
+		}
+	)
+	assert_false(GameManager.refund_market_purchases())
+
+
+func test_market_purchase_rejects_non_market_phase() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["screen"] = GameManager.SCREEN_DAWN
+	GameManager.state["phase"] = GameManager.PHASE_PREP
+	GameManager.state["currency"] = 10
+	GameManager.ensure_dawn_runtime_state()
+
+	assert_false(GameManager.try_purchase_market_bundle("rice"))
+	assert_false(GameManager.refund_market_purchases())
+	assert_eq(GameManager.state["currency"], 10)
 
 
 func test_settlement_waits_until_existing_order_is_cleared() -> void:

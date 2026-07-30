@@ -7,7 +7,7 @@
 - The repository root is the Godot project root.
 - Runtime source lives under `srcs/`.
 - `docs/` contains the confirmed product design, MVP scope, balance targets, and acceptance criteria.
-- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen`, JSON save loading, tap movement, target selection, a repeating customer loop, ordered mackerel preparation, matching-order serving, eating, payment collection, exit, the mackerel station Lv.2 upgrade, the second-seat purchase, one server hire, automated serving, the service timer, last-order handling, settlement aggregation and UI, and GUT coverage for this foundation.
+- The current implementation includes the `srcs/main.tscn` bootstrap, GDScript screen switching in `Main`, `LoadingScreen`, the code-built `DayScreen` and `DawnScreen`, JSON save loading, the complete P0 daytime loop through settlement, dawn market bundle purchases and full refund, and GUT coverage for this foundation. Dawn preparation and the Day 2 transition are not implemented yet.
 
 Treat `docs/` as the source of truth for confirmed gameplay behavior. Do not infer behavior only from names or introduce features outside the documented MVP.
 
@@ -41,6 +41,7 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - `project.godot` autoloads `GameManager` and `SaveManager`.
 - `Main` owns screen creation and replacement. Screens change `GameManager.state`, then emit the no-argument `screen_change_requested` signal; `Main` reads the state to choose the next screen.
 - `LoadingScreen` reads `user://save.json`, applies it to `GameManager.state`, or creates the first-day default state when no save exists.
+- `DawnScreen` owns only its code-built market presentation, tap movement, purchase-pad interaction, and UI. Purchased amounts, spending, raw inventory, and market phase remain authoritative in `GameManager.state`.
 - `DayScreen` builds the gray Stage 01 map, tap-to-move input, player collision, fixed HUD, bounded drag camera, interaction selection, the mackerel station, and its Lv.2 purchase pad entirely from GDScript.
 - `DayInteractionController` chooses one nearby target by explicit priority and then distance. `MackerelStation` owns only its local craft progress; orders, ingredient counts, preparation steps, and the player's carried item remain in `GameManager.state`.
 - `DayCustomerManager` creates customers, assigns every unlocked seat, and creates a mackerel order after arrival. Customer, seat, and order records are authoritative in `GameManager.state`; node position and movement remain screen-local.
@@ -52,6 +53,7 @@ Manual helpers under `tests/manual/` are excluded from automated discovery.
 - The staff pad charges 45 mon after a one-second stay and allows only one server. The server reserves one finished plate in `GameManager.state`, walks to the station to collect it, verifies the matching customer, and serves it automatically. The player remains responsible for preparation and payment collection.
 - `GameManager.tick_service_time()` owns the authoritative countdown. At zero, `DayCustomerManager` stops spawning, dismisses only customers who have not ordered, and leaves existing orders playable through payment and exit.
 - Settlement begins only after the timer is zero and customers, orders, payments, carried plates, and station plates are all cleared. `GameManager` snapshots sales and departures, discards remaining ready and raw inventory once, calculates waste cost, and changes the day phase to `settlement`; `DayScreen` only renders that state.
+- Dawn market pads buy fixed five-portion bundles every second while occupied. Before preparation is confirmed, `GameManager.refund_market_purchases()` must restore both the exact currency spent and all raw quantities bought in that market session.
 - Daytime mackerel production is strict: accept one customer order, collect one mackerel at the ingredient box, collect one rice at the rice pot, then work at the mackerel station. Approaching the station without those steps must not craft anything.
 - `GameManager` owns authoritative game-wide runtime state, including the current day, day phase, service time and timers, currency, inventory, unlocks, upgrades, and stage progression.
 - Screens and gameplay systems must not keep competing copies of state owned by `GameManager`. Update shared state through explicit `GameManager` methods and signals.
