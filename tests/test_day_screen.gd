@@ -629,6 +629,59 @@ func test_matching_plate_is_served_and_customer_finishes_eating() -> void:
 	)
 
 
+func test_ten_customers_reuse_seat_without_runtime_leaks() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	customer_manager.spawn_interval = 999.0
+	customer_manager._spawn_time_remaining = 999.0
+
+	for customer_number: int in range(1, 11):
+		var customer_id: String = "customer_%d" % customer_number
+		var appeared_frames: int = await _wait_for_condition(
+			func() -> bool:
+				return customer_manager.get_customer(
+					customer_id
+				) != null,
+			30
+		)
+		assert_lte(
+			appeared_frames,
+			30,
+			"%s should enter" % customer_id
+		)
+		await _complete_screen_customer_sale(
+			screen,
+			customer_id,
+			customer_number == 10
+		)
+
+	await wait_process_frames(2)
+
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SETTLEMENT)
+	assert_eq(
+		GameManager.get_settlement_summary()["total_plates"],
+		10
+	)
+	assert_eq(GameManager.get_settlement_summary()["revenue"], 60)
+	assert_eq(GameManager.state["currency"], 60)
+	assert_true(
+		GameManager.state["day_runtime"]["customers"].is_empty()
+	)
+	assert_true(GameManager.get_customer_queue().is_empty())
+	assert_true(
+		GameManager.state["day_runtime"]["seat_assignments"].is_empty()
+	)
+	assert_true(
+		GameManager.state["day_runtime"]["orders"].is_empty()
+	)
+	assert_true(
+		GameManager.state["day_runtime"]["payments"].is_empty()
+	)
+	assert_eq(customer_manager.get_customer_count(), 0)
+
+
 func test_first_sale_completes_with_real_movement_under_thirty_seconds() -> void:
 	var screen: DayScreen = await _create_screen()
 	var elapsed_frames: int = 0
@@ -1047,6 +1100,62 @@ func _create_screen() -> DayScreen:
 	add_child_autofree(screen)
 	await wait_process_frames(1)
 	return screen
+
+
+func _complete_screen_customer_sale(
+	screen: DayScreen,
+	customer_id: String,
+	close_after_payment: bool
+) -> void:
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	var customer: DayCustomer = customer_manager.get_customer(
+		customer_id
+	)
+	assert_not_null(customer)
+	if customer == null:
+		return
+	customer.eating_duration = 0.01
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_WAITING_FOR_ORDER
+	)
+	assert_true(GameManager.try_accept_waiting_order(customer_id))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_true(GameManager.try_serve_order(customer_id))
+
+	var payment_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return customer_manager.get_payment(customer_id) != null,
+		30
+	)
+	assert_lte(payment_frames, 30)
+	var payment: DayPayment = customer_manager.get_payment(
+		customer_id
+	)
+	assert_not_null(payment)
+	if payment == null:
+		return
+	screen.get_player().position = payment.position
+	await wait_physics_frames(2)
+
+	assert_null(customer_manager.get_payment(customer_id))
+	assert_true(customer.is_moving_to_exit())
+	if close_after_payment:
+		assert_true(GameManager.request_early_close())
+	customer.position = customer.get_exit_target()
+	await wait_physics_frames(3)
+	await wait_process_frames(1)
+
+	assert_true(GameManager.get_day_customer(customer_id).is_empty())
+	assert_null(customer_manager.get_customer(customer_id))
 
 
 func _wait_for_condition(
