@@ -202,6 +202,50 @@ func test_only_matching_customer_receives_finished_plate() -> void:
 	)
 
 
+func test_twenty_mackerel_sales_leave_no_stale_runtime_state() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+
+	for sale_index: int in range(20):
+		var customer_id: String = _create_ready_plate_order()
+		assert_true(
+			GameManager.try_serve_order(customer_id),
+			"sale %d should serve" % sale_index
+		)
+		assert_true(
+			GameManager.mark_customer_finished_eating(customer_id),
+			"sale %d should finish eating" % sale_index
+		)
+		assert_true(
+			GameManager.collect_customer_payment(customer_id),
+			"sale %d should collect payment" % sale_index
+		)
+		assert_true(
+			GameManager.finish_customer_exit(customer_id),
+			"sale %d should release seat" % sale_index
+		)
+
+	assert_eq(GameManager.state["currency"], 120)
+	assert_eq(
+		GameManager.state["day_stats"]["plates_sold"]["mackerel"],
+		20
+	)
+	assert_eq(GameManager.state["day_stats"]["revenue"], 120)
+	assert_eq(
+		GameManager.state["inventory"]["ready"]["mackerel"],
+		0
+	)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 0)
+	assert_false(GameManager.is_player_carrying_item())
+	assert_true(GameManager.get_day_customer_ids().is_empty())
+	assert_true(GameManager.state["day_runtime"]["orders"].is_empty())
+	assert_true(
+		GameManager.state["day_runtime"]["payments"].is_empty()
+	)
+	assert_true(
+		GameManager.state["day_runtime"]["seat_assignments"].is_empty()
+	)
+
+
 func test_customer_reserves_one_seat_and_creates_mackerel_order() -> void:
 	GameManager.state = GameManager.create_default_game_state()
 	var first_customer_id: String = GameManager.create_day_customer()
