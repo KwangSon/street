@@ -19,6 +19,7 @@ var _queue_targets: Array[Vector2] = []
 var _customers: Dictionary = {}
 var _payments: Dictionary = {}
 var _spawn_time_remaining: float = DEFAULT_SPAWN_INTERVAL
+var _closing_queue: bool = false
 
 
 func configure(
@@ -33,10 +34,19 @@ func configure(
 
 func _ready() -> void:
 	_spawn_time_remaining = spawn_interval
-	call_deferred("_spawn_customer")
+	if not GameManager.state_changed.is_connected(
+		_on_game_state_changed
+	):
+		GameManager.state_changed.connect(_on_game_state_changed)
+	if GameManager.is_accepting_customers():
+		call_deferred("_spawn_customer")
+	else:
+		call_deferred("_dismiss_waiting_queue")
 
 
 func _process(delta: float) -> void:
+	if not GameManager.is_accepting_customers():
+		return
 	if GameManager.get_customer_queue().size() >= (
 		GameManager.MAX_CUSTOMER_QUEUE
 	):
@@ -87,6 +97,8 @@ func has_seat(seat_id: String) -> bool:
 
 
 func _spawn_customer() -> void:
+	if not GameManager.is_accepting_customers():
+		return
 	if (
 		not _has_available_seat()
 		and GameManager.get_customer_queue().size()
@@ -248,8 +260,31 @@ func _on_customer_exited(customer_id: String) -> void:
 	_customers.erase(customer_id)
 	if customer != null:
 		customer.queue_free()
+	if not GameManager.is_accepting_customers():
+		return
 	if _customers.is_empty():
 		_spawn_customer()
 	else:
 		_promote_next_customer()
 		_spawn_time_remaining = maxf(spawn_interval, 0.01)
+
+
+func _on_game_state_changed() -> void:
+	if not GameManager.is_accepting_customers():
+		_dismiss_waiting_queue()
+
+
+func _dismiss_waiting_queue() -> void:
+	if _closing_queue:
+		return
+	_closing_queue = true
+	var queued_customer_ids: Array[String] = (
+		GameManager.get_customer_queue()
+	)
+	for customer_id: String in queued_customer_ids:
+		if not GameManager.dismiss_queued_customer(customer_id):
+			continue
+		var customer: DayCustomer = get_customer(customer_id)
+		if customer != null:
+			customer.start_leaving(_entrance_position)
+	_closing_queue = false

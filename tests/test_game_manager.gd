@@ -29,6 +29,7 @@ func test_default_state_starts_first_day_service() -> void:
 	assert_true(
 		state["day_runtime"]["server_carried_item"].is_empty()
 	)
+	assert_true(state["day_runtime"]["accepting_customers"])
 
 
 func test_apply_loaded_state_deep_copies_and_preserves_extra_keys() -> void:
@@ -62,6 +63,53 @@ func test_apply_loaded_state_adds_missing_day_runtime() -> void:
 	assert_true(GameManager.apply_loaded_game_state(source_state))
 	assert_true(GameManager.state["day_runtime"]["orders"].is_empty())
 	assert_true(GameManager.state["future_data"]["keep"])
+
+
+func test_service_timer_closes_customer_entry_at_zero() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["service_time_remaining"] = 0.05
+
+	assert_true(GameManager.tick_service_time(0.02))
+	assert_almost_eq(
+		GameManager.state["service_time_remaining"],
+		0.03,
+		0.0001
+	)
+	assert_true(GameManager.is_accepting_customers())
+
+	assert_true(GameManager.tick_service_time(0.05))
+	assert_eq(GameManager.state["service_time_remaining"], 0.0)
+	assert_false(GameManager.is_accepting_customers())
+	assert_false(
+		GameManager.state["day_runtime"]["accepting_customers"]
+	)
+	assert_false(GameManager.tick_service_time(1.0))
+
+
+func test_service_timer_does_not_run_outside_day_service() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+
+	assert_false(GameManager.tick_service_time(10.0))
+	assert_eq(GameManager.state["service_time_remaining"], 330.0)
+
+
+func test_closing_dismisses_queued_customer_as_departed() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(GameManager.try_enqueue_day_customer(customer_id))
+	GameManager.state["service_time_remaining"] = 0.0
+	assert_false(GameManager.tick_service_time(0.1))
+
+	assert_false(GameManager.is_accepting_customers())
+	assert_true(GameManager.dismiss_queued_customer(customer_id))
+	assert_true(GameManager.get_customer_queue().is_empty())
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_LEAVING
+	)
+	assert_eq(GameManager.state["day_stats"]["departed_customers"], 1)
+	assert_false(GameManager.dismiss_queued_customer(customer_id))
 
 
 func test_order_requires_mackerel_then_rice_before_crafting() -> void:

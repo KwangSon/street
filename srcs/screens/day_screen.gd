@@ -128,6 +128,7 @@ var _staff_hire_pad: DayStaffHirePad
 var _server: DayServer
 var _inventory_label: Label
 var _currency_label: Label
+var _time_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
 var _gesture_last: Vector2 = Vector2.ZERO
@@ -143,8 +144,18 @@ func _ready() -> void:
 		_on_game_state_changed
 	):
 		GameManager.state_changed.connect(_on_game_state_changed)
+	if not GameManager.service_time_changed.is_connected(
+		_on_service_time_changed
+	):
+		GameManager.service_time_changed.connect(
+			_on_service_time_changed
+		)
 	_reset_camera()
 	get_viewport().size_changed.connect(_on_viewport_size_changed)
+
+
+func _process(delta: float) -> void:
+	GameManager.tick_service_time(delta)
 
 
 func _exit_tree() -> void:
@@ -568,7 +579,7 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 		Rect2(24.0, 14.0, 180.0, 42.0),
 		HORIZONTAL_ALIGNMENT_LEFT
 	)
-	_add_hud_label(
+	_time_label = _add_hud_label(
 		hud,
 		"TimeLabel",
 		_format_time(time_remaining),
@@ -692,6 +703,11 @@ func _on_game_state_changed() -> void:
 	_refresh_currency_hud()
 	if _player != null:
 		_player.set_carried_item(GameManager.get_carried_item())
+
+
+func _on_service_time_changed(time_remaining: float) -> void:
+	if _time_label != null:
+		_time_label.text = _format_time(time_remaining)
 
 
 func _on_customer_interactable_created(

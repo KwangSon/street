@@ -255,6 +255,62 @@ func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
 	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
 
 
+func test_timer_expiry_stops_spawns_and_dismisses_queue() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+	customer_manager.spawn_interval = 0.01
+	customer_manager._spawn_time_remaining = 0.01
+	await wait_physics_frames(20)
+	assert_eq(GameManager.get_customer_queue().size(), 3)
+
+	GameManager.state["service_time_remaining"] = 0.01
+	await wait_physics_frames(5)
+
+	assert_false(GameManager.is_accepting_customers())
+	assert_true(GameManager.get_customer_queue().is_empty())
+	assert_eq(
+		GameManager.state["day_stats"]["departed_customers"],
+		3
+	)
+	assert_eq(
+		screen.get_node("FixedUI/HUD/TimeLabel").text,
+		"00:00"
+	)
+	var next_customer_id: int = int(
+		GameManager.state["day_runtime"]["next_customer_id"]
+	)
+	await wait_physics_frames(180)
+	assert_eq(
+		GameManager.state["day_runtime"]["next_customer_id"],
+		next_customer_id
+	)
+
+
+func test_timer_expiry_keeps_existing_order_playable() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+	assert_eq(
+		GameManager.get_day_customer("customer_1")["state"],
+		GameManager.CUSTOMER_WAITING_FOR_ORDER
+	)
+
+	GameManager.state["service_time_remaining"] = 0.01
+	await wait_physics_frames(5)
+
+	assert_false(GameManager.is_accepting_customers())
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+
+
 func test_initial_customer_reserves_seat_and_shows_order() -> void:
 	var screen: DayScreen = await _create_screen()
 	var customer_manager: DayCustomerManager = (

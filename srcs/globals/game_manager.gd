@@ -1,6 +1,7 @@
 extends Node
 
 signal state_changed
+signal service_time_changed(time_remaining: float)
 
 const SAVE_VERSION: int = 1
 
@@ -198,6 +199,71 @@ func create_day_customer() -> String:
 	}
 	state_changed.emit()
 	return customer_id
+
+
+func tick_service_time(delta: float) -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SERVICE
+	):
+		return false
+	var previous_time: float = maxf(
+		float(state.get("service_time_remaining", 0.0)),
+		0.0
+	)
+	if previous_time <= 0.0:
+		_close_customer_entry()
+		return false
+	var next_time: float = maxf(
+		previous_time - maxf(delta, 0.0),
+		0.0
+	)
+	if is_equal_approx(previous_time, next_time):
+		return false
+
+	state["service_time_remaining"] = next_time
+	service_time_changed.emit(next_time)
+	if next_time <= 0.0:
+		_close_customer_entry()
+	return true
+
+
+func is_accepting_customers() -> bool:
+	if (
+		String(state.get("screen", "")) != SCREEN_DAY
+		or String(state.get("phase", "")) != PHASE_SERVICE
+		or float(state.get("service_time_remaining", 0.0)) <= 0.0
+	):
+		return false
+	_ensure_day_runtime_state()
+	return bool(
+		state["day_runtime"].get("accepting_customers", true)
+	)
+
+
+func dismiss_queued_customer(customer_id: String) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id):
+		return false
+	var customer: Dictionary = customers[customer_id]
+	if (
+		String(customer.get("state", ""))
+		!= CUSTOMER_WAITING_IN_QUEUE
+	):
+		return false
+
+	customer["state"] = CUSTOMER_LEAVING
+	day_runtime["customer_queue"].erase(customer_id)
+	var day_stats: Dictionary = state.get("day_stats", {})
+	if not state.has("day_stats"):
+		state["day_stats"] = day_stats
+	day_stats["departed_customers"] = (
+		int(day_stats.get("departed_customers", 0)) + 1
+	)
+	state_changed.emit()
+	return true
 
 
 func try_assign_customer_to_seat(
@@ -974,6 +1040,15 @@ func _is_seat_unlocked(seat_id: String) -> bool:
 	)
 
 
+func _close_customer_entry() -> void:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	if not bool(day_runtime.get("accepting_customers", true)):
+		return
+	day_runtime["accepting_customers"] = false
+	state_changed.emit()
+
+
 func _create_default_day_runtime() -> Dictionary:
 	return {
 		"next_customer_id": 1,
@@ -984,6 +1059,7 @@ func _create_default_day_runtime() -> Dictionary:
 		"payments": {},
 		"station_item": {},
 		"server_carried_item": {},
+		"accepting_customers": true,
 		"carried_item": {
 			"kind": "",
 			"menu": "",
@@ -1133,6 +1209,23 @@ func _ensure_day_runtime_state() -> bool:
 		or day_runtime["customer_queue"] != normalized_queue
 	):
 		day_runtime["customer_queue"] = normalized_queue
+		changed = true
+
+	var accepting_value: Variant = day_runtime.get(
+		"accepting_customers",
+		float(state.get("service_time_remaining", 0.0)) > 0.0
+	)
+	var normalized_accepting: bool = (
+		bool(accepting_value)
+		if typeof(accepting_value) == TYPE_BOOL
+		else float(state.get("service_time_remaining", 0.0)) > 0.0
+	)
+	if (
+		not day_runtime.has("accepting_customers")
+		or day_runtime["accepting_customers"]
+		!= normalized_accepting
+	):
+		day_runtime["accepting_customers"] = normalized_accepting
 		changed = true
 
 	var next_customer_value: Variant = day_runtime.get(
