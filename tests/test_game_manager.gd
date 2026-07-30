@@ -24,6 +24,9 @@ func test_default_state_starts_first_day_service() -> void:
 		0
 	)
 	assert_eq(state["day_runtime"]["carried_item"]["count"], 0)
+	assert_true(state["day_runtime"]["customers"].is_empty())
+	assert_true(state["day_runtime"]["seat_assignments"].is_empty())
+	assert_true(state["day_runtime"]["orders"].is_empty())
 
 
 func test_apply_loaded_state_deep_copies_and_preserves_extra_keys() -> void:
@@ -122,6 +125,74 @@ func test_completed_mackerel_plate_can_be_carried_once() -> void:
 			GameManager.MENU_MACKEREL
 		),
 		1
+	)
+
+
+func test_customer_reserves_one_seat_and_creates_mackerel_order() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var first_customer_id: String = GameManager.create_day_customer()
+	var second_customer_id: String = GameManager.create_day_customer()
+
+	assert_eq(first_customer_id, "customer_1")
+	assert_eq(second_customer_id, "customer_2")
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			first_customer_id,
+			"seat_1"
+		)
+	)
+	assert_false(
+		GameManager.try_assign_customer_to_seat(
+			second_customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			first_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+
+	var first_customer: Dictionary = (
+		GameManager.get_day_customer(first_customer_id)
+	)
+	assert_eq(
+		first_customer["state"],
+		GameManager.CUSTOMER_WAITING_FOR_ORDER
+	)
+	assert_eq(first_customer["seat_id"], "seat_1")
+	assert_eq(first_customer["menu"], GameManager.MENU_MACKEREL)
+	var waiting_orders: Array[Dictionary] = (
+		GameManager.get_waiting_orders()
+	)
+	assert_eq(waiting_orders.size(), 1)
+	assert_eq(
+		waiting_orders[0]["customer_id"],
+		first_customer_id
+	)
+
+
+func test_locked_egg_menu_cannot_be_ordered() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			customer_id,
+			"seat_1"
+		)
+	)
+
+	assert_false(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_EGG
+		)
+	)
+	assert_true(GameManager.get_waiting_orders().is_empty())
+	assert_eq(
+		GameManager.get_day_customer(customer_id)["state"],
+		GameManager.CUSTOMER_MOVING_TO_SEAT
 	)
 
 

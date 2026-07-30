@@ -11,6 +11,11 @@ const MENU_MACKEREL: String = "mackerel"
 const MENU_EGG: String = "egg"
 const CARRIED_KIND_PLATE: String = "plate"
 
+const CUSTOMER_ENTERING: String = "entering"
+const CUSTOMER_MOVING_TO_SEAT: String = "moving_to_seat"
+const CUSTOMER_WAITING_FOR_ORDER: String = "waiting_for_order"
+const ORDER_WAITING: String = "waiting"
+
 const PHASE_SERVICE: String = "service"
 const PHASE_SETTLEMENT: String = "settlement"
 const PHASE_MARKET: String = "market"
@@ -200,6 +205,125 @@ func is_player_carrying_item() -> bool:
 	)
 
 
+func create_day_customer() -> String:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var next_customer_id: int = int(
+		day_runtime["next_customer_id"]
+	)
+	var customer_id: String = "customer_%d" % next_customer_id
+	day_runtime["next_customer_id"] = next_customer_id + 1
+
+	var customers: Dictionary = day_runtime["customers"]
+	customers[customer_id] = {
+		"state": CUSTOMER_ENTERING,
+		"seat_id": "",
+		"menu": "",
+	}
+	state_changed.emit()
+	return customer_id
+
+
+func try_assign_customer_to_seat(
+	customer_id: String,
+	seat_id: String
+) -> bool:
+	_ensure_day_runtime_state()
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id) or seat_id.is_empty():
+		return false
+
+	var seat_assignments: Dictionary = (
+		day_runtime["seat_assignments"]
+	)
+	if seat_assignments.has(seat_id):
+		return false
+
+	var customer: Dictionary = customers[customer_id]
+	if not String(customer.get("seat_id", "")).is_empty():
+		return false
+
+	customer["seat_id"] = seat_id
+	customer["state"] = CUSTOMER_MOVING_TO_SEAT
+	seat_assignments[seat_id] = customer_id
+	state_changed.emit()
+	return true
+
+
+func mark_customer_seated(
+	customer_id: String,
+	menu_id: String
+) -> bool:
+	_ensure_day_runtime_state()
+	if not _is_menu_unlocked(menu_id):
+		return false
+
+	var day_runtime: Dictionary = state["day_runtime"]
+	var customers: Dictionary = day_runtime["customers"]
+	if not customers.has(customer_id):
+		return false
+
+	var customer: Dictionary = customers[customer_id]
+	var seat_id: String = String(customer.get("seat_id", ""))
+	if (
+		seat_id.is_empty()
+		or String(customer.get("state", ""))
+		!= CUSTOMER_MOVING_TO_SEAT
+	):
+		return false
+
+	customer["state"] = CUSTOMER_WAITING_FOR_ORDER
+	customer["menu"] = menu_id
+	var orders: Dictionary = day_runtime["orders"]
+	orders[customer_id] = {
+		"customer_id": customer_id,
+		"seat_id": seat_id,
+		"menu": menu_id,
+		"status": ORDER_WAITING,
+	}
+	state_changed.emit()
+	return true
+
+
+func get_day_customer(customer_id: String) -> Dictionary:
+	_ensure_day_runtime_state()
+	var customers: Dictionary = state["day_runtime"]["customers"]
+	if not customers.has(customer_id):
+		return {}
+	return Dictionary(customers[customer_id]).duplicate(true)
+
+
+func get_day_customer_ids() -> Array[String]:
+	_ensure_day_runtime_state()
+	var customer_ids: Array[String] = []
+	var customers: Dictionary = state["day_runtime"]["customers"]
+	for customer_id: Variant in customers.keys():
+		customer_ids.append(String(customer_id))
+	customer_ids.sort()
+	return customer_ids
+
+
+func get_waiting_orders() -> Array[Dictionary]:
+	_ensure_day_runtime_state()
+	var waiting_orders: Array[Dictionary] = []
+	var orders: Dictionary = state["day_runtime"]["orders"]
+	for customer_id: Variant in orders.keys():
+		var order_value: Variant = orders[customer_id]
+		if not order_value is Dictionary:
+			continue
+		var order: Dictionary = order_value
+		if String(order.get("status", "")) == ORDER_WAITING:
+			waiting_orders.append(order.duplicate(true))
+	waiting_orders.sort_custom(
+		func(first: Dictionary, second: Dictionary) -> bool:
+			return String(first["customer_id"]) < String(
+				second["customer_id"]
+			)
+	)
+	return waiting_orders
+
+
 func _is_valid_loaded_game_state(data: Dictionary) -> bool:
 	var required_keys: Array[String] = [
 		"save_version",
@@ -245,6 +369,10 @@ func _is_integer_number(value: Variant) -> bool:
 
 func _create_default_day_runtime() -> Dictionary:
 	return {
+		"next_customer_id": 1,
+		"customers": {},
+		"seat_assignments": {},
+		"orders": {},
 		"completed_plates": {
 			MENU_MACKEREL: 0,
 			MENU_EGG: 0,
@@ -352,6 +480,39 @@ func _ensure_day_runtime_state() -> bool:
 		day_runtime["carried_item"] = normalized_carried
 		changed = true
 
+	for dictionary_key: String in [
+		"customers",
+		"seat_assignments",
+		"orders",
+	]:
+		var dictionary_value: Variant = day_runtime.get(
+			dictionary_key,
+			{}
+		)
+		if not dictionary_value is Dictionary:
+			day_runtime[dictionary_key] = {}
+			changed = true
+		elif not day_runtime.has(dictionary_key):
+			day_runtime[dictionary_key] = dictionary_value
+			changed = true
+
+	var next_customer_value: Variant = day_runtime.get(
+		"next_customer_id",
+		1
+	)
+	if (
+		not _is_integer_number(next_customer_value)
+		or int(next_customer_value) < 1
+	):
+		day_runtime["next_customer_id"] = 1
+		changed = true
+	elif (
+		not day_runtime.has("next_customer_id")
+		or typeof(next_customer_value) != TYPE_INT
+	):
+		day_runtime["next_customer_id"] = int(next_customer_value)
+		changed = true
+
 	return changed
 
 
@@ -383,6 +544,17 @@ func _get_recipe(menu_id: String) -> Dictionary:
 
 func _is_known_menu(menu_id: String) -> bool:
 	return menu_id == MENU_MACKEREL or menu_id == MENU_EGG
+
+
+func _is_menu_unlocked(menu_id: String) -> bool:
+	if menu_id == MENU_MACKEREL:
+		return true
+	if menu_id != MENU_EGG:
+		return false
+	var progression_value: Variant = state.get("progression", {})
+	if not progression_value is Dictionary:
+		return false
+	return int(progression_value.get("egg_station_level", 0)) > 0
 
 
 func _has_recipe_ingredients(

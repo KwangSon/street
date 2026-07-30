@@ -33,9 +33,45 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_not_null(screen.get_node("World/Player"))
 	assert_not_null(screen.get_node("World/StageCamera"))
 	assert_not_null(screen.get_node("World/InteractionController"))
+	assert_not_null(screen.get_node("World/CustomerManager"))
 	assert_not_null(screen.get_mackerel_station())
 	assert_not_null(screen.get_node("FixedUI/HUD"))
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
+
+
+func test_initial_customer_reserves_seat_and_shows_order() -> void:
+	var screen: DayScreen = await _create_screen()
+	var customer_manager: DayCustomerManager = (
+		screen.get_customer_manager()
+	)
+
+	assert_eq(customer_manager.get_customer_count(), 1)
+	assert_eq(
+		GameManager.state["day_runtime"]["seat_assignments"][
+			"seat_1"
+		],
+		"customer_1"
+	)
+
+	await wait_physics_frames(180)
+
+	var customer_state: Dictionary = (
+		GameManager.get_day_customer("customer_1")
+	)
+	assert_eq(
+		customer_state["state"],
+		GameManager.CUSTOMER_WAITING_FOR_ORDER
+	)
+	assert_eq(customer_state["menu"], GameManager.MENU_MACKEREL)
+	var customer: DayCustomer = customer_manager.get_customer(
+		"customer_1"
+	)
+	assert_false(customer.is_moving_to_seat())
+	assert_true(customer.get_node("OrderBubble").visible)
+	assert_eq(
+		customer.get_node("OrderBubble/MenuLabel").text,
+		"고등어"
+	)
 
 
 func test_player_approach_starts_mackerel_crafting() -> void:

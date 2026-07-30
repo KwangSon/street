@@ -14,12 +14,14 @@
 
 ## 현재 구현 상태
 
-현재 저장소에는 실행·저장 로드, 낮 화면 이동과 첫 고등어 제작을 담당하는 코드 기반이 구현돼 있다.
+현재 저장소에는 실행·저장 로드, 낮 화면 이동, 첫 손님의 착석·주문과 고등어 제작을 담당하는 코드 기반이 구현돼 있다.
 
 - `srcs/main.tscn`: 기존 부트스트랩 장면
 - `srcs/main.gd`: `state["screen"]`을 읽어 화면을 교체하는 진입점
 - `srcs/screens/loading_screen.gd`: 로컬 JSON 로드, 첫 게임 생성, 손상 데이터 복구 UI
 - `srcs/screens/day_screen.gd`: 코드 기반 회색 맵, 고정 HUD, 탭 이동, 드래그 카메라와 고등어 조리대 연결
+- `srcs/day/day_customer.gd`: 손님의 좌석 이동과 주문 말풍선
+- `srcs/day/day_customer_manager.gd`: 첫 손님 생성, 좌석 예약과 고등어 주문 생성
 - `srcs/day/day_interaction_controller.gd`: 접근 대상의 우선순위·거리 선택과 진입·이탈 처리
 - `srcs/day/mackerel_station.gd`: 재료 소비, 제작 진행, 일시정지, 완성 접시 적재와 회수
 - `srcs/day/day_navigation.gd`: 시설을 우회하는 40px A* 이동 경로
@@ -29,6 +31,7 @@
 - `project.godot`: Godot 4.7 모바일 프로젝트 설정
 - 실행용 메인 장면이 `project.godot`에 등록돼 있다.
 - GUT 9.7.1과 `tests/` 자동 발견 설정이 구성돼 있다.
+- 첫 손님 한 명이 입구에서 좌석 1로 이동해 고등어를 주문한다. 대기열·서빙·식사·결제·퇴장은 아직 구현하지 않았다.
 - 낮 영업 중 고등어 1접시는 조리대 접근 시 준비된 밥 1과 고등어 1을 함께 소비해 만든다. 별도의 낮 재료 운반 단계는 없다.
 - 새벽 화면과 손님·서빙·결제는 아직 구현하지 않았다. Main은 목적 화면을 만들 수 없으면 현재 화면을 유지하고 오류를 기록한다.
 
@@ -54,6 +57,8 @@ street/
 ├── docs/              # 확정 기획과 수용 기준
 ├── srcs/
 │   ├── day/
+│   │   ├── day_customer.gd
+│   │   ├── day_customer_manager.gd
 │   │   ├── day_interactable.gd
 │   │   ├── day_interaction_controller.gd
 │   │   ├── day_navigation.gd

@@ -15,6 +15,9 @@ const DayInteractionControllerScript: Script = preload(
 const MackerelStationScript: Script = preload(
 	"res://srcs/day/mackerel_station.gd"
 )
+const DayCustomerManagerScript: Script = preload(
+	"res://srcs/day/day_customer_manager.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
@@ -104,6 +107,7 @@ var _camera: Camera2D
 var _navigation: DayNavigation
 var _interaction_controller: DayInteractionController
 var _mackerel_station: MackerelStation
+var _customer_manager: DayCustomerManager
 var _inventory_label: Label
 var _active_pointer_id: int = NO_POINTER_ID
 var _gesture_start: Vector2 = Vector2.ZERO
@@ -188,6 +192,10 @@ func get_mackerel_station() -> MackerelStation:
 	return _mackerel_station
 
 
+func get_customer_manager() -> DayCustomerManager:
+	return _customer_manager
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -237,6 +245,16 @@ func _build_world() -> void:
 	_interaction_controller.configure(_player)
 	_interaction_controller.register_interactable(_mackerel_station)
 	_world.add_child(_interaction_controller)
+
+	_customer_manager = DayCustomerManagerScript.new()
+	_customer_manager.name = "CustomerManager"
+	_customer_manager.configure(
+		Vector2(120.0, 860.0),
+		{
+			"seat_1": Vector2(500.0, 750.0),
+		}
+	)
+	_world.add_child(_customer_manager)
 
 	_camera = Camera2D.new()
 	_camera.name = "StageCamera"
