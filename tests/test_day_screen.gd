@@ -66,6 +66,40 @@ func test_builds_tap_movement_layout_without_direction_buttons() -> void:
 	assert_null(screen.get_node_or_null("FixedUI/DirectionButtons"))
 
 
+func test_stage_two_builds_a_wider_location_with_reset_seats() -> void:
+	GameManager.state["progression"]["stall_tier"] = (
+		GameManager.STAGE_TWO
+	)
+	GameManager.state["progression"]["seats"] = 1
+	var screen: DayScreen = await _create_screen()
+
+	assert_eq(screen.get_current_map_size(), DayScreen.STAGE_TWO_MAP_SIZE)
+	assert_eq(
+		screen.get_stage_camera().limit_right,
+		int(DayScreen.STAGE_TWO_MAP_SIZE.x)
+	)
+	assert_eq(
+		screen.get_stage_camera().limit_bottom,
+		int(DayScreen.STAGE_TWO_MAP_SIZE.y)
+	)
+	assert_not_null(screen.get_node("World/LocationSign"))
+	assert_eq(
+		screen.get_node("World/FishStation").position,
+		Vector2(160.0, 340.0)
+	)
+	assert_eq(
+		screen.get_node("World/Seat1").position,
+		Vector2(620.0, 1040.0)
+	)
+	assert_null(screen.get_node_or_null("World/Seat2"))
+	assert_null(screen.get_node_or_null("World/Seat3"))
+	assert_null(screen.get_node_or_null("World/Seat4"))
+	assert_eq(
+		screen.get_node("FixedUI/HUD/DayLabel").text,
+		"S2 · Day 1"
+	)
+
+
 func test_upgrade_ui_explains_operating_reserve_block() -> void:
 	GameManager.state["currency"] = 21
 	var screen: DayScreen = await _create_screen()
@@ -413,6 +447,7 @@ func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
 	var screen: DayScreen = await _create_screen()
 	var server: DayServer = screen.get_server()
 	assert_not_null(server)
+	server.set_process(false)
 	var customer: DayCustomer = (
 		screen.get_customer_manager().get_customer("customer_1")
 	)
@@ -426,6 +461,7 @@ func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
 	assert_true(GameManager.complete_active_order_craft())
 	assert_true(GameManager.has_station_item())
 	assert_false(GameManager.is_player_carrying_item())
+	server.set_process(true)
 
 	var serving_frames: int = await _wait_for_condition(
 		func() -> bool:
@@ -444,6 +480,170 @@ func test_hired_server_auto_serves_matching_plate_under_ten_seconds() -> void:
 	assert_false(GameManager.has_station_item())
 	assert_true(GameManager.get_server_carried_item().is_empty())
 	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
+
+
+func test_server_claimed_plate_cannot_be_taken_by_arriving_player() -> void:
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var screen: DayScreen = await _create_screen()
+	var server: DayServer = await (
+		_prepare_station_plate_with_paused_server(screen)
+	)
+
+	server._find_next_task()
+	assert_eq(
+		GameManager.get_station_item()["reserved_by"],
+		GameManager.RESERVATION_SERVER
+	)
+	assert_eq(
+		server.get_server_state(),
+		DayServer.ServerState.MOVING_TO_STATION
+	)
+	assert_eq(
+		screen.get_cooking_counter().get_node("StatusLabel").text,
+		"접객 이동 중"
+	)
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_cooking_counter().position
+		)
+	)
+	var arrival_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return not screen.get_player().has_destination(),
+		240
+	)
+
+	assert_lte(arrival_frames, 240)
+	assert_false(GameManager.is_player_carrying_item())
+	assert_true(GameManager.has_station_item())
+	assert_eq(
+		GameManager.get_station_item()["reserved_by"],
+		GameManager.RESERVATION_SERVER
+	)
+
+
+func test_player_claimed_plate_is_not_taken_by_server_afterward() -> void:
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var screen: DayScreen = await _create_screen()
+	var server: DayServer = await (
+		_prepare_station_plate_with_paused_server(screen)
+	)
+
+	assert_true(
+		screen.request_player_move_to_world(
+			screen.get_cooking_counter().position
+		)
+	)
+	var collect_frames: int = await _wait_for_condition(
+		func() -> bool:
+			return (
+				String(
+					GameManager.get_carried_item().get(
+						"kind",
+						""
+					)
+				)
+				== GameManager.CARRIED_KIND_PLATE
+			),
+		240
+	)
+	server._find_next_task()
+
+	assert_lte(collect_frames, 240)
+	assert_false(GameManager.has_station_item())
+	assert_true(GameManager.get_server_carried_item().is_empty())
+	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
+
+
+func test_inventory_hud_distinguishes_total_and_reserved_portions() -> void:
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 1,
+		"mackerel": 1,
+		"egg": 0,
+	}
+	var screen: DayScreen = await _create_screen()
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+	var inventory_text: String = String(
+		screen.get_node("FixedUI/HUD/InventoryLabel").text
+	)
+
+	assert_string_contains(inventory_text, "밥 1 · 예약 1")
+	assert_string_contains(inventory_text, "고등어 1 · 예약 1")
+	assert_eq(GameManager.get_available_ready_count("rice"), 0)
+	assert_eq(
+		GameManager.get_available_ready_count(
+			GameManager.MENU_MACKEREL
+		),
+		0
+	)
+
+
+func test_server_path_failure_releases_order_reservation() -> void:
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var screen: DayScreen = await _create_screen()
+	var server: DayServer = screen.get_server()
+	server.set_process(false)
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+	server._navigation = null
+
+	server._find_next_task()
+
+	assert_eq(server.get_server_state(), DayServer.ServerState.IDLE)
+	assert_eq(
+		String(
+			GameManager.get_day_order("customer_1").get(
+				"reserved_by",
+				""
+			)
+		),
+		""
+	)
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+
+
+func test_server_claimed_order_cannot_be_taken_by_arriving_player() -> void:
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var screen: DayScreen = await _create_screen()
+	var server: DayServer = screen.get_server()
+	server.set_process(false)
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+
+	server._find_next_task()
+	screen.get_player().position = customer.position
+	await wait_physics_frames(2)
+
+	assert_eq(
+		server.get_server_state(),
+		DayServer.ServerState.MOVING_TO_ORDER
+	)
+	assert_eq(
+		GameManager.get_day_order("customer_1")["reserved_by"],
+		GameManager.RESERVATION_SERVER
+	)
+	assert_false(GameManager.is_player_carrying_item())
+	assert_eq(
+		customer.get_node("OrderBubble/MenuLabel").text,
+		"접객 이동 중"
+	)
+	assert_null(
+		screen.get_interaction_controller().get_current_target()
+	)
 
 
 func test_timer_expiry_stops_spawns_and_dismisses_unordered_customers() -> void:
@@ -574,6 +774,63 @@ func test_settlement_continue_requests_dawn_without_signal_argument() -> void:
 	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAWN)
 	assert_eq(GameManager.state["phase"], GameManager.PHASE_MARKET)
 	assert_signal_emitted(screen, "screen_change_requested")
+
+
+func test_settlement_purchases_stage_two_and_requests_screen_rebuild() -> void:
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["currency"] = GameManager.STAGE_TWO_LOCATION_COST
+	GameManager.state["progression"]["mackerel_station_level"] = 2
+	GameManager.state["progression"]["egg_station_level"] = 3
+	GameManager.state["progression"]["seats"] = 4
+	var screen: DayScreen = await _create_screen()
+	watch_signals(screen)
+	var purchase_button: Button = (
+		screen.get_stage_two_purchase_button()
+	)
+
+	assert_true(purchase_button.visible)
+	assert_false(purchase_button.disabled)
+	assert_string_contains(purchase_button.text, "새 장소로 이전")
+	purchase_button.pressed.emit()
+
+	assert_eq(GameManager.get_current_stage(), GameManager.STAGE_TWO)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.get_mackerel_station_level(), 2)
+	assert_eq(GameManager.get_egg_station_level(), 3)
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_signal_emitted(screen, "screen_change_requested")
+
+
+func test_settlement_shows_stage_two_purchase_shortfall() -> void:
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["currency"] = (
+		GameManager.STAGE_TWO_LOCATION_COST - 37
+	)
+	var screen: DayScreen = await _create_screen()
+	var purchase_button: Button = (
+		screen.get_stage_two_purchase_button()
+	)
+
+	assert_true(purchase_button.visible)
+	assert_true(purchase_button.disabled)
+	assert_string_contains(purchase_button.text, "37문 부족")
+	assert_eq(GameManager.get_current_stage(), GameManager.STAGE_ONE)
+
+
+func test_stage_two_settlement_does_not_offer_location_again() -> void:
+	GameManager.state["progression"]["stall_tier"] = (
+		GameManager.STAGE_TWO
+	)
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["currency"] = 1000
+	var screen: DayScreen = await _create_screen()
+
+	assert_false(screen.get_stage_two_purchase_button().visible)
+	assert_eq(
+		screen.get_settlement_continue_button().position,
+		Vector2(66.0, 930.0)
+	)
 
 
 func test_initial_customer_reserves_seat_and_shows_order() -> void:
@@ -1302,6 +1559,28 @@ func _create_screen() -> DayScreen:
 	add_child_autofree(screen)
 	await wait_process_frames(1)
 	return screen
+
+
+func _prepare_station_plate_with_paused_server(
+	screen: DayScreen
+) -> DayServer:
+	var server: DayServer = screen.get_server()
+	assert_not_null(server)
+	server.set_process(false)
+	var customer: DayCustomer = (
+		screen.get_customer_manager().get_customer("customer_1")
+	)
+	assert_not_null(customer)
+	customer.position = customer.get_seat_target()
+	await wait_physics_frames(2)
+	assert_true(GameManager.try_accept_waiting_order("customer_1"))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_true(GameManager.has_station_item())
+	assert_false(GameManager.is_player_carrying_item())
+	return server
 
 
 func _complete_screen_customer_sale(

@@ -72,8 +72,10 @@ func get_payment(customer_id: String) -> DayPayment:
 	return _payments.get(customer_id) as DayPayment
 
 
-func collect_payment_by_staff(customer_id: String) -> bool:
-	if not GameManager.collect_customer_payment(customer_id):
+func collect_reserved_payment_by_staff(customer_id: String) -> bool:
+	if not GameManager.try_server_collect_reserved_payment(
+		customer_id
+	):
 		return false
 	_on_payment_collected(customer_id)
 	return true

@@ -53,6 +53,12 @@ func is_player_in_range(
 	var can_accept_order: bool = (
 		customer_state == GameManager.CUSTOMER_WAITING_FOR_ORDER
 		and not GameManager.is_player_carrying_item()
+		and String(
+			GameManager.get_day_order(_customer_id).get(
+				"reserved_by",
+				""
+			)
+		).is_empty()
 	)
 	var can_serve: bool = (
 		customer_state == GameManager.CUSTOMER_WAITING_FOR_FOOD

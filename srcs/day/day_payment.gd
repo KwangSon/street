@@ -79,6 +79,9 @@ func is_player_in_range(
 	if (
 		String(payment.get("status", ""))
 		!= GameManager.PAYMENT_WAITING
+		or not String(
+			payment.get("reserved_by", "")
+		).is_empty()
 	):
 		return false
 	return (

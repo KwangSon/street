@@ -185,7 +185,10 @@ func _try_start_craft() -> bool:
 
 
 func _resolve_station_state() -> StationState:
-	if _ingredients_reserved:
+	if (
+		_ingredients_reserved
+		or GameManager.is_counter_busy_by_chef()
+	):
 		return StationState.CRAFTING
 	var station_item: Dictionary = GameManager.get_station_item()
 	if not station_item.is_empty():
@@ -242,20 +245,31 @@ func _refresh_visual() -> void:
 			)
 		StationState.CRAFTING:
 			_status_label.text = (
-				"제작 중"
-				if _player_active
-				else "제작 일시정지"
+				"주방장 제작 중"
+				if GameManager.is_counter_busy_by_chef()
+				else (
+					"제작 중"
+					if _player_active
+					else "제작 일시정지"
+				)
 			)
 			_status_label.add_theme_color_override(
 				"font_color",
 				STATUS_COLOR
 			)
 		StationState.READY:
-			_status_label.text = (
-				"접객 수령 대기"
-				if GameManager.is_server_hired()
-				else "완성 음식 수령"
+			var station_item: Dictionary = (
+				GameManager.get_station_item()
 			)
+			if (
+				String(station_item.get("reserved_by", ""))
+				== GameManager.RESERVATION_SERVER
+			):
+				_status_label.text = "접객 이동 중"
+			elif GameManager.is_server_hired():
+				_status_label.text = "접객 수령 대기"
+			else:
+				_status_label.text = "완성 음식 수령"
 			_status_label.add_theme_color_override(
 				"font_color",
 				STATUS_COLOR

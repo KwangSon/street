@@ -17,6 +17,7 @@ const TEXT_COLOR: Color = Color("35291f")
 
 var _server_state: ServerState = ServerState.IDLE
 var _customer_id: String = ""
+var _task_kind: String = ""
 var _station_position: Vector2 = Vector2.ZERO
 var _station_positions: Dictionary = {}
 var _customer_manager: DayCustomerManager
@@ -95,19 +96,7 @@ func is_carrying_plate() -> bool:
 
 
 func _recover_interrupted_delivery() -> void:
-	var server_item: Dictionary = (
-		GameManager.get_server_carried_item()
-	)
-	var station_item: Dictionary = GameManager.get_station_item()
-	var customer_id: String = String(
-		server_item.get(
-			"customer_id",
-			station_item.get("customer_id", "")
-		)
-	)
-	if customer_id.is_empty():
-		return
-	GameManager.cancel_server_plate_delivery(customer_id)
+	GameManager.clear_server_task_reservations()
 
 
 func _find_next_task() -> void:
@@ -116,6 +105,7 @@ func _find_next_task() -> void:
 	)
 	if not reserved_customer_id.is_empty():
 		_customer_id = reserved_customer_id
+		_task_kind = GameManager.SERVER_TASK_PLATE
 		var station_item: Dictionary = (
 			GameManager.get_station_item()
 		)
@@ -126,42 +116,50 @@ func _find_next_task() -> void:
 			_station_positions.get(menu_id, _station_position)
 		)
 		if not _start_path(_station_position):
-			GameManager.cancel_server_plate_delivery(_customer_id)
+			_cancel_current_task()
 			_reset_to_idle()
 			return
 		_server_state = ServerState.MOVING_TO_STATION
 		return
 
-	var waiting_payments: Array[String] = (
-		GameManager.get_waiting_payment_customer_ids()
+	reserved_customer_id = (
+		GameManager.try_reserve_waiting_payment_for_server()
 	)
-	if not waiting_payments.is_empty():
+	if not reserved_customer_id.is_empty():
 		if _start_customer_task(
-			waiting_payments[0],
-			ServerState.MOVING_TO_PAYMENT
+			reserved_customer_id,
+			ServerState.MOVING_TO_PAYMENT,
+			GameManager.SERVER_TASK_PAYMENT
 		):
 			return
 
-	var waiting_orders: Array[Dictionary] = (
-		GameManager.get_waiting_orders()
+	reserved_customer_id = (
+		GameManager.try_reserve_waiting_order_for_server()
 	)
-	if not waiting_orders.is_empty():
+	if not reserved_customer_id.is_empty():
 		_start_customer_task(
-			String(waiting_orders[0].get("customer_id", "")),
-			ServerState.MOVING_TO_ORDER
+			reserved_customer_id,
+			ServerState.MOVING_TO_ORDER,
+			GameManager.SERVER_TASK_ORDER
 		)
 
 
 func _start_customer_task(
 	customer_id: String,
-	next_state: int
+	next_state: int,
+	task_kind: String
 ) -> bool:
 	var customer: DayCustomer = _customer_manager.get_customer(
 		customer_id
 	)
 	if customer == null or not _start_path(customer.position):
+		GameManager.cancel_server_task_reservation(
+			task_kind,
+			customer_id
+		)
 		return false
 	_customer_id = customer_id
+	_task_kind = task_kind
 	_server_state = next_state
 	return true
 
@@ -170,14 +168,14 @@ func _collect_reserved_plate() -> void:
 	if not GameManager.try_server_collect_reserved_plate(
 		_customer_id
 	):
-		GameManager.cancel_server_plate_delivery(_customer_id)
+		_cancel_current_task()
 		_reset_to_idle()
 		return
 	var customer: DayCustomer = _customer_manager.get_customer(
 		_customer_id
 	)
 	if customer == null or not _start_path(customer.position):
-		GameManager.cancel_server_plate_delivery(_customer_id)
+		_cancel_current_task()
 		_reset_to_idle()
 		return
 	_server_state = ServerState.MOVING_TO_CUSTOMER
@@ -186,21 +184,31 @@ func _collect_reserved_plate() -> void:
 
 func _serve_customer() -> void:
 	if not GameManager.try_server_serve_order(_customer_id):
-		GameManager.cancel_server_plate_delivery(_customer_id)
+		_cancel_current_task()
 	_reset_to_idle()
 
 
 func _take_customer_order() -> void:
-	if GameManager.is_employee_hired(GameManager.STAFF_ROLE_CHEF):
-		GameManager.try_chef_accept_waiting_order(_customer_id)
-	else:
-		GameManager.try_accept_waiting_order(_customer_id)
+	if not GameManager.try_server_accept_reserved_order(_customer_id):
+		_cancel_current_task()
 	_reset_to_idle()
 
 
 func _collect_customer_payment() -> void:
-	_customer_manager.collect_payment_by_staff(_customer_id)
+	if not _customer_manager.collect_reserved_payment_by_staff(
+		_customer_id
+	):
+		_cancel_current_task()
 	_reset_to_idle()
+
+
+func _cancel_current_task() -> void:
+	if _task_kind.is_empty() or _customer_id.is_empty():
+		return
+	GameManager.cancel_server_task_reservation(
+		_task_kind,
+		_customer_id
+	)
 
 
 func _start_path(destination: Vector2) -> bool:
@@ -228,6 +236,7 @@ func _advance_path(delta: float) -> bool:
 func _reset_to_idle() -> void:
 	_server_state = ServerState.IDLE
 	_customer_id = ""
+	_task_kind = ""
 	_path = PackedVector2Array()
 	_path_index = 0
 	_refresh_visual()

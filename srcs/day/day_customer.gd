@@ -206,13 +206,48 @@ func _refresh_from_state() -> void:
 		GameManager.CUSTOMER_EATING,
 		GameManager.CUSTOMER_WAITING_FOR_PAYMENT,
 	]
+	_order_label.add_theme_font_size_override("font_size", 16)
 	match customer_state:
+		GameManager.CUSTOMER_WAITING_FOR_ORDER:
+			var order: Dictionary = GameManager.get_day_order(
+				_customer_id
+			)
+			_order_label.text = (
+				"접객 이동 중"
+				if String(order.get("reserved_by", ""))
+				== GameManager.RESERVATION_SERVER
+				else GameManager.get_menu_display_name(menu_id)
+			)
+			if (
+				String(order.get("reserved_by", ""))
+				== GameManager.RESERVATION_SERVER
+			):
+				_order_label.add_theme_font_size_override(
+					"font_size",
+					13
+				)
 		GameManager.CUSTOMER_WAITING_FOR_FOOD:
 			_order_label.text = "조리 중"
 		GameManager.CUSTOMER_EATING:
 			_order_label.text = "냠냠"
 		GameManager.CUSTOMER_WAITING_FOR_PAYMENT:
-			_order_label.text = "계산"
+			var payment: Dictionary = (
+				GameManager.get_customer_payment(_customer_id)
+			)
+			_order_label.text = (
+				"접객 계산 중"
+				if String(payment.get("reserved_by", ""))
+				== GameManager.RESERVATION_SERVER
+				else "계산"
+			)
+			if (
+				String(payment.get("reserved_by", ""))
+				== GameManager.RESERVATION_SERVER
+			):
+				_order_label.add_theme_font_size_override(
+					"font_size",
+					13
+				)
 		_:
 			_order_label.text = GameManager.get_menu_display_name(
 				menu_id

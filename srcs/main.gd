@@ -510,8 +510,9 @@ func _is_day_screen() -> bool:
 
 
 func _get_checkpoint_key() -> String:
-	return "%s:%s:%d" % [
+	return "%s:%s:%d:%d" % [
 		String(GameManager.state.get("screen", "")),
 		String(GameManager.state.get("phase", "")),
 		int(GameManager.state.get("day", 0)),
+		GameManager.get_current_stage(),
 	]

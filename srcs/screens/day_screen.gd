@@ -30,8 +30,17 @@ const DayChefScript: Script = preload(
 
 const VIEWPORT_SIZE: Vector2 = Vector2(720.0, 1280.0)
 const MAP_SIZE: Vector2 = Vector2(1200.0, 1920.0)
+const STAGE_TWO_MAP_SIZE: Vector2 = Vector2(1600.0, 2400.0)
 const DEFAULT_CAMERA_POSITION: Vector2 = Vector2(360.0, 640.0)
 const PLAYER_START_POSITION: Vector2 = Vector2(360.0, 620.0)
+const STAGE_TWO_DEFAULT_CAMERA_POSITION: Vector2 = Vector2(
+	500.0,
+	700.0
+)
+const STAGE_TWO_PLAYER_START_POSITION: Vector2 = Vector2(
+	500.0,
+	720.0
+)
 const DRAG_THRESHOLD: float = 8.0
 const EARLY_CLOSE_HOLD_DURATION: float = 2.0
 
@@ -40,6 +49,7 @@ const MOUSE_POINTER_ID: int = -1
 const NO_POINTER_ID: int = -2
 
 const MAP_COLOR: Color = Color("b9b7ad")
+const STAGE_TWO_MAP_COLOR: Color = Color("c7c1b2")
 const GRID_COLOR: Color = Color("aaa89f")
 const HUD_COLOR: Color = Color("35291f")
 const HUD_TEXT_COLOR: Color = Color("fff4d6")
@@ -57,6 +67,19 @@ const SEAT_4_POSITION: Vector2 = Vector2(900.0, 1200.0)
 const SEAT_4_TARGET: Vector2 = Vector2(900.0, 1110.0)
 const SERVER_START_POSITION: Vector2 = Vector2(900.0, 1320.0)
 const CHEF_START_POSITION: Vector2 = Vector2(760.0, 620.0)
+const STAGE_TWO_SERVER_START_POSITION: Vector2 = Vector2(
+	1280.0,
+	1500.0
+)
+const STAGE_TWO_CHEF_START_POSITION: Vector2 = Vector2(
+	900.0,
+	640.0
+)
+const STAGE_TWO_ENTRANCE_POSITION: Vector2 = Vector2(160.0, 1120.0)
+const STAGE_TWO_SEAT_1_TARGET: Vector2 = Vector2(620.0, 950.0)
+const STAGE_TWO_SEAT_2_TARGET: Vector2 = Vector2(1050.0, 950.0)
+const STAGE_TWO_SEAT_3_TARGET: Vector2 = Vector2(620.0, 1250.0)
+const STAGE_TWO_SEAT_4_TARGET: Vector2 = Vector2(1050.0, 1250.0)
 
 const FACILITIES: Array[Dictionary] = [
 	{
@@ -133,7 +156,108 @@ const FACILITIES: Array[Dictionary] = [
 	},
 ]
 
+const STAGE_TWO_FACILITIES: Array[Dictionary] = [
+	{
+		"name": "LocationSign",
+		"label": "Stage 2 · 넓은 점포",
+		"position": Vector2(800.0, 170.0),
+		"size": Vector2(360.0, 72.0),
+		"color": Color("e2c17c"),
+		"collision": false,
+	},
+	{
+		"name": "FishStation",
+		"label": "생선류",
+		"position": Vector2(160.0, 340.0),
+		"size": Vector2(160.0, 104.0),
+		"color": Color("79986b"),
+		"collision": true,
+	},
+	{
+		"name": "RiceStation",
+		"label": "밥",
+		"position": Vector2(430.0, 340.0),
+		"size": Vector2(160.0, 104.0),
+		"color": Color("c6a477"),
+		"collision": true,
+	},
+	{
+		"name": "CookingCounter",
+		"label": "조리대",
+		"position": Vector2(720.0, 340.0),
+		"size": Vector2(210.0, 104.0),
+		"color": Color("7197ad"),
+		"collision": true,
+	},
+	{
+		"name": "OtherStation",
+		"label": "기타요리",
+		"position": Vector2(1060.0, 340.0),
+		"size": Vector2(190.0, 104.0),
+		"color": Color("d7bd61"),
+		"collision": true,
+	},
+	{
+		"name": "Entrance",
+		"label": "넓은 입구",
+		"position": STAGE_TWO_ENTRANCE_POSITION,
+		"size": Vector2(180.0, 96.0),
+		"color": Color("c98e64"),
+		"collision": false,
+	},
+	{
+		"name": "Seat1",
+		"label": "좌석 1",
+		"position": Vector2(620.0, 1040.0),
+		"size": Vector2(140.0, 112.0),
+		"color": Color("a57853"),
+		"collision": true,
+	},
+	{
+		"name": "Seat2",
+		"label": "좌석 2",
+		"position": Vector2(1050.0, 1040.0),
+		"size": Vector2(140.0, 112.0),
+		"color": Color("8d6b51"),
+		"collision": true,
+	},
+	{
+		"name": "Seat3",
+		"label": "좌석 3",
+		"position": Vector2(620.0, 1340.0),
+		"size": Vector2(140.0, 112.0),
+		"color": Color("8d6b51"),
+		"collision": true,
+	},
+	{
+		"name": "Seat4",
+		"label": "좌석 4",
+		"position": Vector2(1050.0, 1340.0),
+		"size": Vector2(140.0, 112.0),
+		"color": Color("8d6b51"),
+		"collision": true,
+	},
+]
+
 var _world: Node2D
+var _map_size: Vector2 = MAP_SIZE
+var _facilities: Array[Dictionary] = FACILITIES
+var _default_camera_position: Vector2 = DEFAULT_CAMERA_POSITION
+var _player_start_position: Vector2 = PLAYER_START_POSITION
+var _entrance_position: Vector2 = Vector2(120.0, 860.0)
+var _queue_positions: Array[Vector2] = [
+	Vector2(190.0, 860.0),
+	Vector2(260.0, 860.0),
+	Vector2(330.0, 860.0),
+]
+var _seat_targets: Dictionary = {
+	"seat_1": Vector2(500.0, 750.0),
+	SEAT_2_ID: SEAT_2_TARGET,
+	SEAT_3_ID: SEAT_3_TARGET,
+	SEAT_4_ID: SEAT_4_TARGET,
+}
+var _server_start_position: Vector2 = SERVER_START_POSITION
+var _chef_start_position: Vector2 = CHEF_START_POSITION
 var _player: DayPlayer
 var _camera: Camera2D
 var _navigation: DayNavigation
@@ -153,6 +277,7 @@ var _settlement_panel: ColorRect
 var _settlement_summary_label: Label
 var _settlement_progress_label: Label
 var _settlement_continue_button: Button
+var _stage_two_purchase_button: Button
 var _employee_button: Button
 var _employee_panel: ColorRect
 var _employee_summary_label: Label
@@ -175,6 +300,7 @@ var _early_close_progress: float = 0.0
 func _ready() -> void:
 	name = "DayScreen"
 	GameManager.ensure_day_runtime_state()
+	_configure_stage_layout()
 	_build_world()
 	_build_fixed_ui()
 	_refresh_inventory_hud()
@@ -348,6 +474,14 @@ func get_settlement_continue_button() -> Button:
 	return _settlement_continue_button
 
 
+func get_stage_two_purchase_button() -> Button:
+	return _stage_two_purchase_button
+
+
+func get_current_map_size() -> Vector2:
+	return _map_size
+
+
 func get_play_area_rect() -> Rect2:
 	return Rect2(
 		Vector2(0.0, HUD_HEIGHT),
@@ -376,6 +510,29 @@ func request_player_move_to_world(
 	return _player.follow_path(path)
 
 
+func _configure_stage_layout() -> void:
+	if GameManager.get_current_stage() != GameManager.STAGE_TWO:
+		return
+	_map_size = STAGE_TWO_MAP_SIZE
+	_facilities = STAGE_TWO_FACILITIES
+	_default_camera_position = STAGE_TWO_DEFAULT_CAMERA_POSITION
+	_player_start_position = STAGE_TWO_PLAYER_START_POSITION
+	_entrance_position = STAGE_TWO_ENTRANCE_POSITION
+	_queue_positions = [
+		Vector2(250.0, 1120.0),
+		Vector2(340.0, 1120.0),
+		Vector2(430.0, 1120.0),
+	]
+	_seat_targets = {
+		"seat_1": STAGE_TWO_SEAT_1_TARGET,
+		SEAT_2_ID: STAGE_TWO_SEAT_2_TARGET,
+		SEAT_3_ID: STAGE_TWO_SEAT_3_TARGET,
+		SEAT_4_ID: STAGE_TWO_SEAT_4_TARGET,
+	}
+	_server_start_position = STAGE_TWO_SERVER_START_POSITION
+	_chef_start_position = STAGE_TWO_CHEF_START_POSITION
+
+
 func _build_world() -> void:
 	_world = Node2D.new()
 	_world.name = "World"
@@ -383,14 +540,14 @@ func _build_world() -> void:
 
 	_add_map_background()
 	_add_map_boundaries()
-	for facility: Dictionary in FACILITIES:
+	for facility: Dictionary in _facilities:
 		if not _should_build_facility(String(facility["name"])):
 			continue
 		_add_facility(facility)
 
 	_player = DayPlayerScript.new()
 	_player.move_speed = DayPlayer.DEFAULT_MOVE_SPEED
-	_player.position = PLAYER_START_POSITION
+	_player.position = _player_start_position
 	_world.add_child(_player)
 	_player.set_carried_item(GameManager.get_carried_item())
 
@@ -407,13 +564,9 @@ func _build_world() -> void:
 	_customer_manager = DayCustomerManagerScript.new()
 	_customer_manager.name = "CustomerManager"
 	_customer_manager.configure(
-		Vector2(120.0, 860.0),
+		_entrance_position,
 		_get_unlocked_seat_targets(),
-		[
-			Vector2(190.0, 860.0),
-			Vector2(260.0, 860.0),
-			Vector2(330.0, 860.0),
-		]
+		_queue_positions
 	)
 	_customer_manager.interactable_created.connect(
 		_on_customer_interactable_created
@@ -422,18 +575,18 @@ func _build_world() -> void:
 
 	_camera = Camera2D.new()
 	_camera.name = "StageCamera"
-	_camera.position = DEFAULT_CAMERA_POSITION
+	_camera.position = _default_camera_position
 	_camera.position_smoothing_enabled = false
 	_camera.limit_left = 0
 	_camera.limit_top = 0
-	_camera.limit_right = int(MAP_SIZE.x)
-	_camera.limit_bottom = int(MAP_SIZE.y)
+	_camera.limit_right = int(_map_size.x)
+	_camera.limit_bottom = int(_map_size.y)
 	_camera.enabled = true
 	_world.add_child(_camera)
 
 	_navigation = DayNavigationScript.new()
 	_navigation.configure(
-		MAP_SIZE,
+		_map_size,
 		DayPlayer.COLLISION_RADIUS,
 		_get_navigation_obstacle_rects()
 	)
@@ -443,25 +596,29 @@ func _build_world() -> void:
 func _add_map_background() -> void:
 	var background: Polygon2D = Polygon2D.new()
 	background.name = "MapBackground"
-	background.color = MAP_COLOR
+	background.color = (
+		STAGE_TWO_MAP_COLOR
+		if GameManager.get_current_stage() == GameManager.STAGE_TWO
+		else MAP_COLOR
+	)
 	background.polygon = PackedVector2Array([
 		Vector2.ZERO,
-		Vector2(MAP_SIZE.x, 0.0),
-		MAP_SIZE,
-		Vector2(0.0, MAP_SIZE.y),
+		Vector2(_map_size.x, 0.0),
+		_map_size,
+		Vector2(0.0, _map_size.y),
 	])
 	background.z_index = -10
 	_world.add_child(background)
 
-	for x_position: float in range(0, int(MAP_SIZE.x) + 1, 120):
+	for x_position: float in range(0, int(_map_size.x) + 1, 120):
 		_add_grid_line(
 			Vector2(x_position, 0.0),
-			Vector2(x_position, MAP_SIZE.y)
+			Vector2(x_position, _map_size.y)
 		)
-	for y_position: float in range(0, int(MAP_SIZE.y) + 1, 120):
+	for y_position: float in range(0, int(_map_size.y) + 1, 120):
 		_add_grid_line(
 			Vector2(0.0, y_position),
-			Vector2(MAP_SIZE.x, y_position)
+			Vector2(_map_size.x, y_position)
 		)
 
 
@@ -478,29 +635,35 @@ func _add_map_boundaries() -> void:
 	const WALL_THICKNESS: float = 64.0
 	_add_static_collision(
 		"BoundaryTop",
-		Vector2(MAP_SIZE.x * 0.5, -WALL_THICKNESS * 0.5),
-		Vector2(MAP_SIZE.x + WALL_THICKNESS * 2.0, WALL_THICKNESS)
+		Vector2(_map_size.x * 0.5, -WALL_THICKNESS * 0.5),
+		Vector2(
+			_map_size.x + WALL_THICKNESS * 2.0,
+			WALL_THICKNESS
+		)
 	)
 	_add_static_collision(
 		"BoundaryBottom",
 		Vector2(
-			MAP_SIZE.x * 0.5,
-			MAP_SIZE.y + WALL_THICKNESS * 0.5
+			_map_size.x * 0.5,
+			_map_size.y + WALL_THICKNESS * 0.5
 		),
-		Vector2(MAP_SIZE.x + WALL_THICKNESS * 2.0, WALL_THICKNESS)
+		Vector2(
+			_map_size.x + WALL_THICKNESS * 2.0,
+			WALL_THICKNESS
+		)
 	)
 	_add_static_collision(
 		"BoundaryLeft",
-		Vector2(-WALL_THICKNESS * 0.5, MAP_SIZE.y * 0.5),
-		Vector2(WALL_THICKNESS, MAP_SIZE.y)
+		Vector2(-WALL_THICKNESS * 0.5, _map_size.y * 0.5),
+		Vector2(WALL_THICKNESS, _map_size.y)
 	)
 	_add_static_collision(
 		"BoundaryRight",
 		Vector2(
-			MAP_SIZE.x + WALL_THICKNESS * 0.5,
-			MAP_SIZE.y * 0.5
+			_map_size.x + WALL_THICKNESS * 0.5,
+			_map_size.y * 0.5
 		),
-		Vector2(WALL_THICKNESS, MAP_SIZE.y)
+		Vector2(WALL_THICKNESS, _map_size.y)
 	)
 
 
@@ -587,7 +750,7 @@ func _add_facility(facility: Dictionary) -> void:
 
 func _get_navigation_obstacle_rects() -> Array[Rect2]:
 	var obstacle_rects: Array[Rect2] = []
-	for facility: Dictionary in FACILITIES:
+	for facility: Dictionary in _facilities:
 		if (
 			not bool(facility["collision"])
 			or not _should_build_facility(
@@ -665,7 +828,10 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 	_add_hud_label(
 		hud,
 		"DayLabel",
-		"Day %d" % day,
+		"S%d · Day %d" % [
+			GameManager.get_current_stage(),
+			day,
+		],
 		Rect2(144.0, 14.0, 120.0, 42.0),
 		HORIZONTAL_ALIGNMENT_LEFT
 	)
@@ -686,9 +852,17 @@ func _add_hud(fixed_ui: CanvasLayer) -> void:
 	_inventory_label = _add_hud_label(
 		hud,
 		"InventoryLabel",
-		"밥 %d  |  고등어 %d" % [
-			int(ready_inventory.get("rice", 0)),
-			int(ready_inventory.get("mackerel", 0)),
+		"%s  |  %s" % [
+			_format_ready_inventory_entry(
+				"밥",
+				"rice",
+				ready_inventory
+			),
+			_format_ready_inventory_entry(
+				"고등어",
+				GameManager.MENU_MACKEREL,
+				ready_inventory
+			),
 		],
 		Rect2(24.0, 62.0, 672.0, 36.0),
 		HORIZONTAL_ALIGNMENT_CENTER,
@@ -978,10 +1152,23 @@ func _add_settlement_ui(fixed_ui: CanvasLayer) -> void:
 	)
 	content.add_child(_settlement_progress_label)
 
+	_stage_two_purchase_button = Button.new()
+	_stage_two_purchase_button.name = "StageTwoPurchaseButton"
+	_stage_two_purchase_button.position = Vector2(66.0, 900.0)
+	_stage_two_purchase_button.size = Vector2(480.0, 76.0)
+	_stage_two_purchase_button.add_theme_font_size_override(
+		"font_size",
+		21
+	)
+	_stage_two_purchase_button.pressed.connect(
+		_on_stage_two_purchase_pressed
+	)
+	content.add_child(_stage_two_purchase_button)
+
 	_settlement_continue_button = Button.new()
 	_settlement_continue_button.name = "ContinueButton"
-	_settlement_continue_button.position = Vector2(66.0, 930.0)
-	_settlement_continue_button.size = Vector2(480.0, 92.0)
+	_settlement_continue_button.position = Vector2(66.0, 988.0)
+	_settlement_continue_button.size = Vector2(480.0, 70.0)
 	_settlement_continue_button.text = "새벽 장보기로"
 	_settlement_continue_button.add_theme_font_size_override(
 		"font_size",
@@ -1067,18 +1254,20 @@ func _end_pointer(pointer_id: int, position: Vector2) -> void:
 func _reset_camera() -> void:
 	if _camera == null:
 		return
-	_camera.position = _clamp_camera_position(DEFAULT_CAMERA_POSITION)
+	_camera.position = _clamp_camera_position(
+		_default_camera_position
+	)
 
 
 func _clamp_camera_position(target_position: Vector2) -> Vector2:
 	var half_visible: Vector2 = VIEWPORT_SIZE * 0.5
 	var min_position: Vector2 = half_visible
-	var max_position: Vector2 = MAP_SIZE - half_visible
+	var max_position: Vector2 = _map_size - half_visible
 	if max_position.x < min_position.x:
-		min_position.x = MAP_SIZE.x * 0.5
+		min_position.x = _map_size.x * 0.5
 		max_position.x = min_position.x
 	if max_position.y < min_position.y:
-		min_position.y = MAP_SIZE.y * 0.5
+		min_position.y = _map_size.y * 0.5
 		max_position.y = min_position.y
 
 	return Vector2(
@@ -1179,6 +1368,11 @@ func _on_settlement_continue_pressed() -> void:
 		screen_change_requested.emit()
 
 
+func _on_stage_two_purchase_pressed() -> void:
+	if GameManager.try_purchase_stage_two_location():
+		screen_change_requested.emit()
+
+
 func _on_employee_button_pressed() -> void:
 	if _employee_panel == null:
 		return
@@ -1250,17 +1444,17 @@ func _install_unlocked_seats() -> void:
 		2: {
 			"name": "Seat2",
 			"id": SEAT_2_ID,
-			"target": SEAT_2_TARGET,
+			"target": _seat_targets[SEAT_2_ID],
 		},
 		3: {
 			"name": "Seat3",
 			"id": SEAT_3_ID,
-			"target": SEAT_3_TARGET,
+			"target": _seat_targets[SEAT_3_ID],
 		},
 		4: {
 			"name": "Seat4",
 			"id": SEAT_4_ID,
-			"target": SEAT_4_TARGET,
+			"target": _seat_targets[SEAT_4_ID],
 		},
 	}
 	var installed_any: bool = false
@@ -1269,7 +1463,7 @@ func _install_unlocked_seats() -> void:
 		var facility_name: String = String(current_seat["name"])
 		if _world.get_node_or_null(facility_name) != null:
 			continue
-		for facility: Dictionary in FACILITIES:
+		for facility: Dictionary in _facilities:
 			if String(facility["name"]) != facility_name:
 				continue
 			_add_facility(facility)
@@ -1282,7 +1476,7 @@ func _install_unlocked_seats() -> void:
 			)
 	if installed_any and _navigation != null:
 		_navigation.configure(
-			MAP_SIZE,
+			_map_size,
 			DayPlayer.COLLISION_RADIUS,
 			_get_navigation_obstacle_rects()
 		)
@@ -1303,7 +1497,7 @@ func _install_server_if_hired() -> void:
 		GameManager.MENU_EGG: _cooking_counter.position,
 	}
 	_server.configure(
-		SERVER_START_POSITION,
+		_server_start_position,
 		station_positions,
 		_customer_manager,
 		_navigation
@@ -1323,7 +1517,7 @@ func _install_chef_if_hired() -> void:
 		return
 	_chef = DayChefScript.new()
 	_chef.configure(
-		CHEF_START_POSITION,
+		_chef_start_position,
 		{
 			GameManager.KITCHEN_STATION_FISH:
 				_ingredient_box.position,
@@ -1362,14 +1556,14 @@ func _sync_employees() -> void:
 
 func _get_unlocked_seat_targets() -> Dictionary:
 	var seat_targets: Dictionary = {
-		"seat_1": Vector2(500.0, 750.0),
+		"seat_1": _seat_targets["seat_1"],
 	}
 	if GameManager.get_unlocked_seat_count() >= 2:
-		seat_targets[SEAT_2_ID] = SEAT_2_TARGET
+		seat_targets[SEAT_2_ID] = _seat_targets[SEAT_2_ID]
 	if GameManager.get_unlocked_seat_count() >= 3:
-		seat_targets[SEAT_3_ID] = SEAT_3_TARGET
+		seat_targets[SEAT_3_ID] = _seat_targets[SEAT_3_ID]
 	if GameManager.get_unlocked_seat_count() >= 4:
-		seat_targets[SEAT_4_ID] = SEAT_4_TARGET
+		seat_targets[SEAT_4_ID] = _seat_targets[SEAT_4_ID]
 	return seat_targets
 
 
@@ -1388,16 +1582,56 @@ func _refresh_inventory_hud() -> void:
 		return
 	var ready_inventory: Dictionary = _get_ready_inventory()
 	if GameManager.is_menu_unlocked(GameManager.MENU_EGG):
-		_inventory_label.text = "밥 %d | 고등어 %d | 계란 %d" % [
-			int(ready_inventory.get("rice", 0)),
-			int(ready_inventory.get("mackerel", 0)),
-			int(ready_inventory.get("egg", 0)),
+		_inventory_label.text = "%s | %s | %s" % [
+			_format_ready_inventory_entry(
+				"밥",
+				"rice",
+				ready_inventory
+			),
+			_format_ready_inventory_entry(
+				"고등어",
+				GameManager.MENU_MACKEREL,
+				ready_inventory
+			),
+			_format_ready_inventory_entry(
+				"계란",
+				GameManager.MENU_EGG,
+				ready_inventory
+			),
 		]
 	else:
-		_inventory_label.text = "밥 %d  |  고등어 %d" % [
-			int(ready_inventory.get("rice", 0)),
-			int(ready_inventory.get("mackerel", 0)),
+		_inventory_label.text = "%s  |  %s" % [
+			_format_ready_inventory_entry(
+				"밥",
+				"rice",
+				ready_inventory
+			),
+			_format_ready_inventory_entry(
+				"고등어",
+				GameManager.MENU_MACKEREL,
+				ready_inventory
+			),
 		]
+
+
+func _format_ready_inventory_entry(
+	display_name: String,
+	material_id: String,
+	ready_inventory: Dictionary
+) -> String:
+	var total_count: int = int(
+		ready_inventory.get(material_id, 0)
+	)
+	var reserved_count: int = (
+		GameManager.get_reserved_ready_count(material_id)
+	)
+	if reserved_count > 0:
+		return "%s %d · 예약 %d" % [
+			display_name,
+			total_count,
+			reserved_count,
+		]
+	return "%s %d" % [display_name, total_count]
 
 
 func _refresh_currency_hud() -> void:
@@ -1496,13 +1730,23 @@ func _refresh_upgrade_ui() -> void:
 		+ int(GameManager.is_menu_unlocked(GameManager.MENU_EGG))
 	)
 	_upgrade_button.text = "해금·성장"
-	_upgrade_summary_label.text = (
-		"좌석 %d/4 · 메뉴 %d/2\n"
-		+ "구매 즉시 좌석과 신규 주문 후보에 반영됩니다."
-	) % [
-		GameManager.get_unlocked_seat_count(),
-		unlocked_menu_count,
-	]
+	if GameManager.get_current_stage() == GameManager.STAGE_ONE:
+		_upgrade_summary_label.text = (
+			"좌석 %d/4 · 메뉴 %d/2\n"
+			+ "새 장소 %d문 · 하루 정산 후 구매"
+		) % [
+			GameManager.get_unlocked_seat_count(),
+			unlocked_menu_count,
+			GameManager.STAGE_TWO_LOCATION_COST,
+		]
+	else:
+		_upgrade_summary_label.text = (
+			"Stage 2 · 좌석 %d/4 · 메뉴 %d/2\n"
+			+ "넓은 점포의 시설을 다시 확장합니다."
+		) % [
+			GameManager.get_unlocked_seat_count(),
+			unlocked_menu_count,
+		]
 	_refresh_seat_upgrade_button()
 	_refresh_menu_upgrade_button(
 		_mackerel_upgrade_button,
@@ -1655,7 +1899,7 @@ func _refresh_settlement_ui() -> void:
 		else {}
 	)
 	_settlement_summary_label.text = (
-		"Day %d\n\n"
+		"Stage %d · Day %d\n\n"
 		+ "총매출  %d문\n"
 		+ "판매 접시  %d개\n"
 		+ "  · 고등어 %d개\n"
@@ -1665,6 +1909,7 @@ func _refresh_settlement_ui() -> void:
 		+ "  · 밥 %d / 고등어 %d / 계란 %d\n"
 		+ "폐기 원가  %.1f문"
 	) % [
+		GameManager.get_current_stage(),
 		int(summary.get("day", 1)),
 		int(summary.get("revenue", 0)),
 		int(summary.get("total_plates", 0)),
@@ -1676,24 +1921,71 @@ func _refresh_settlement_ui() -> void:
 		int(waste.get("egg", 0)),
 		float(summary.get("waste_cost", 0.0)),
 	]
-	_settlement_progress_label.text = (
-		"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d\n"
-		+ "주방장 %s · 접객 %s\n\n"
-		+ "내일 약 %d~%d명 예상\n"
-		+ "내일 장사할 재료를 사러 갑니다"
-	) % [
-		GameManager.get_mackerel_station_level(),
-		GameManager.get_egg_station_level(),
-		GameManager.get_unlocked_seat_count(),
-		"고용" if GameManager.is_employee_hired(
+	var chef_status: String = (
+		"고용"
+		if GameManager.is_employee_hired(
 			GameManager.STAFF_ROLE_CHEF
-		) else "미고용",
-		"고용" if GameManager.is_employee_hired(
+		)
+		else "미고용"
+	)
+	var service_status: String = (
+		"고용"
+		if GameManager.is_employee_hired(
 			GameManager.STAFF_ROLE_SERVICE
-		) else "미고용",
-		int(summary.get("next_customer_min", 18)),
-		int(summary.get("next_customer_max", 22)),
-	]
+		)
+		else "미고용"
+	)
+	if GameManager.get_current_stage() == GameManager.STAGE_ONE:
+		_settlement_progress_label.text = (
+			"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d\n"
+			+ "주방장 %s · 접객 %s\n\n"
+			+ "새 장소 %d문 · 보유 %d문\n"
+			+ "이전하면 메뉴 해금과 레벨만 유지됩니다"
+		) % [
+			GameManager.get_mackerel_station_level(),
+			GameManager.get_egg_station_level(),
+			GameManager.get_unlocked_seat_count(),
+			chef_status,
+			service_status,
+			GameManager.STAGE_TWO_LOCATION_COST,
+			int(GameManager.state.get("currency", 0)),
+		]
+		_stage_two_purchase_button.visible = true
+		_stage_two_purchase_button.disabled = (
+			not GameManager.can_purchase_stage_two_location()
+		)
+		var shortfall: int = (
+			GameManager.get_stage_two_purchase_shortfall()
+		)
+		_stage_two_purchase_button.text = (
+			"새 장소로 이전 · %d문\n메뉴·레벨만 유지"
+			% GameManager.STAGE_TWO_LOCATION_COST
+			if shortfall == 0
+			else "새 장소 %d문 · %d문 부족" % [
+				GameManager.STAGE_TWO_LOCATION_COST,
+				shortfall,
+			]
+		)
+		_settlement_continue_button.position = Vector2(66.0, 988.0)
+		_settlement_continue_button.size = Vector2(480.0, 70.0)
+	else:
+		_settlement_progress_label.text = (
+			"오늘 성장: 고등어 Lv.%d · 계란 Lv.%d · 좌석 %d\n"
+			+ "주방장 %s · 접객 %s\n\n"
+			+ "내일 약 %d~%d명 예상\n"
+			+ "내일 장사할 재료를 사러 갑니다"
+		) % [
+			GameManager.get_mackerel_station_level(),
+			GameManager.get_egg_station_level(),
+			GameManager.get_unlocked_seat_count(),
+			chef_status,
+			service_status,
+			int(summary.get("next_customer_min", 18)),
+			int(summary.get("next_customer_max", 22)),
+		]
+		_stage_two_purchase_button.visible = false
+		_settlement_continue_button.position = Vector2(66.0, 930.0)
+		_settlement_continue_button.size = Vector2(480.0, 92.0)
 
 
 func _get_ready_inventory() -> Dictionary:

@@ -63,6 +63,55 @@ func test_main_creates_day_screen_after_loading() -> void:
 	assert_eq(_count_screen_children(main), 1)
 
 
+func test_stage_two_purchase_rebuilds_day_screen_and_saves_transition() -> void:
+	var saved_state: Dictionary = GameManager.create_default_game_state()
+	saved_state["phase"] = GameManager.PHASE_SETTLEMENT
+	saved_state["currency"] = GameManager.STAGE_TWO_LOCATION_COST
+	saved_state["progression"]["mackerel_station_level"] = 2
+	saved_state["progression"]["egg_station_level"] = 3
+	saved_state["progression"]["seats"] = 4
+	assert_eq(SaveManager.save_game_state(saved_state, TEST_PATH), OK)
+
+	var main: Node = _create_main()
+	add_child_autofree(main)
+	await wait_process_frames(3)
+	var stage_one_screen: DayScreen = main.get_current_screen()
+
+	stage_one_screen.get_stage_two_purchase_button().pressed.emit()
+	await wait_process_frames(3)
+
+	assert_ne(main.get_current_screen(), stage_one_screen)
+	assert_is(main.get_current_screen(), DayScreen)
+	assert_eq(GameManager.get_current_stage(), GameManager.STAGE_TWO)
+	assert_eq(
+		main.get_current_screen().get_current_map_size(),
+		DayScreen.STAGE_TWO_MAP_SIZE
+	)
+	var loaded_result: Dictionary = SaveManager.load_game_state(TEST_PATH)
+	assert_eq(loaded_result["status"], SaveManager.LoadStatus.OK)
+	assert_eq(
+		int(loaded_result["state"]["progression"]["stall_tier"]),
+		GameManager.STAGE_TWO
+	)
+	assert_eq(int(loaded_result["state"]["currency"]), 0)
+	assert_eq(
+		int(
+			loaded_result["state"]["progression"][
+				"mackerel_station_level"
+			]
+		),
+		2
+	)
+	assert_eq(
+		int(
+			loaded_result["state"]["progression"][
+				"egg_station_level"
+			]
+		),
+		3
+	)
+
+
 func test_main_creates_dawn_screen_from_market_state() -> void:
 	var saved_state: Dictionary = GameManager.create_default_game_state()
 	saved_state["screen"] = GameManager.SCREEN_DAWN

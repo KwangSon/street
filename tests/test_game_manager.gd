@@ -129,8 +129,6 @@ func test_exhausted_service_closes_only_without_active_order() -> void:
 
 	GameManager.state = GameManager.create_default_game_state()
 	ready_inventory = GameManager.state["inventory"]["ready"]
-	ready_inventory["rice"] = 0
-	ready_inventory["mackerel"] = 0
 	var customer_id: String = GameManager.create_day_customer()
 	assert_true(
 		GameManager.try_assign_customer_to_seat(
@@ -144,6 +142,8 @@ func test_exhausted_service_closes_only_without_active_order() -> void:
 			GameManager.MENU_MACKEREL
 		)
 	)
+	ready_inventory["rice"] = 0
+	ready_inventory["mackerel"] = 0
 
 	assert_false(GameManager.try_close_exhausted_service())
 	assert_true(GameManager.is_accepting_customers())
@@ -270,6 +270,92 @@ func test_settlement_finalizes_sales_departures_and_waste_once() -> void:
 		}
 	)
 	assert_false(GameManager.request_dawn_after_settlement())
+
+
+func test_stage_two_location_requires_stage_one_settlement_and_500_mon() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = GameManager.STAGE_TWO_LOCATION_COST
+
+	assert_eq(GameManager.get_current_stage(), GameManager.STAGE_ONE)
+	assert_false(GameManager.can_purchase_stage_two_location())
+	assert_false(GameManager.try_purchase_stage_two_location())
+
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["currency"] = (
+		GameManager.STAGE_TWO_LOCATION_COST - 1
+	)
+
+	assert_false(GameManager.can_purchase_stage_two_location())
+	assert_eq(GameManager.get_stage_two_purchase_shortfall(), 1)
+	assert_false(GameManager.try_purchase_stage_two_location())
+
+	GameManager.state["currency"] = GameManager.STAGE_TWO_LOCATION_COST
+
+	assert_true(GameManager.can_purchase_stage_two_location())
+	assert_eq(GameManager.get_stage_two_purchase_shortfall(), 0)
+
+
+func test_stage_two_location_keeps_only_menu_unlocks_and_levels() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["phase"] = GameManager.PHASE_SETTLEMENT
+	GameManager.state["day"] = 9
+	GameManager.state["currency"] = 777
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 3,
+		"mackerel": 4,
+		"egg": 5,
+	}
+	var progression: Dictionary = GameManager.state["progression"]
+	progression["mackerel_station_level"] = 4
+	progression["egg_station_level"] = 3
+	progression["seats"] = 4
+	progression["stage_completed"] = true
+	progression["employees"][GameManager.STAFF_ROLE_CHEF][
+		"hired"
+	] = true
+	progression["employees"][GameManager.STAFF_ROLE_SERVICE][
+		"hired"
+	] = true
+	progression["server_hired"] = true
+	GameManager.state["totals"]["plates_sold"]["mackerel"] = 80
+	GameManager.state["totals"]["plates_sold"]["egg"] = 30
+	GameManager.state["totals"]["revenue"] = 900
+	GameManager.state["day_runtime"]["next_customer_id"] = 27
+	GameManager.state["settlement_summary"] = {"day": 9}
+
+	assert_true(GameManager.try_purchase_stage_two_location())
+
+	assert_eq(GameManager.get_current_stage(), GameManager.STAGE_TWO)
+	assert_eq(GameManager.state["screen"], GameManager.SCREEN_DAY)
+	assert_eq(GameManager.state["phase"], GameManager.PHASE_SERVICE)
+	assert_eq(GameManager.state["day"], 1)
+	assert_eq(GameManager.state["currency"], 0)
+	assert_eq(GameManager.get_mackerel_station_level(), 4)
+	assert_eq(GameManager.get_egg_station_level(), 3)
+	assert_eq(GameManager.get_unlocked_seat_count(), 1)
+	assert_false(
+		GameManager.is_employee_hired(GameManager.STAFF_ROLE_CHEF)
+	)
+	assert_false(GameManager.is_server_hired())
+	assert_eq(
+		GameManager.state["inventory"]["ready"],
+		{
+			"rice": 20,
+			"mackerel": 20,
+			"egg": 0,
+		}
+	)
+	assert_eq(GameManager.state["totals"]["revenue"], 0)
+	assert_eq(
+		GameManager.state["totals"]["plates_sold"],
+		{
+			"mackerel": 0,
+			"egg": 0,
+		}
+	)
+	assert_eq(GameManager.state["day_runtime"]["next_customer_id"], 1)
+	assert_false(GameManager.state.has("settlement_summary"))
+	assert_false(GameManager.try_purchase_stage_two_location())
 
 
 func test_market_bundles_purchase_and_refund_exactly() -> void:
@@ -1227,6 +1313,23 @@ func test_employee_hire_prepays_wage_and_renews_every_seven_days() -> void:
 		),
 		8
 	)
+	var reserved_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			reserved_customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			reserved_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_eq(
+		GameManager.try_reserve_waiting_order_for_server(),
+		reserved_customer_id
+	)
 
 	GameManager.state["day"] = 8
 	GameManager.state["currency"] = 60
@@ -1244,6 +1347,15 @@ func test_employee_hire_prepays_wage_and_renews_every_seven_days() -> void:
 		GameManager.is_employee_hired(GameManager.STAFF_ROLE_CHEF)
 	)
 	assert_false(GameManager.is_server_hired())
+	assert_eq(
+		String(
+			GameManager.get_day_order(reserved_customer_id).get(
+				"reserved_by",
+				""
+			)
+		),
+		""
+	)
 	assert_eq(
 		GameManager.get_employee_next_wage_day(
 			GameManager.STAFF_ROLE_CHEF
@@ -1300,6 +1412,206 @@ func test_chef_follows_recipe_route_and_finishes_at_counter() -> void:
 	)
 
 
+func test_one_ready_portion_is_reserved_by_exactly_one_order() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["progression"]["seats"] = 2
+	GameManager.state["inventory"]["ready"] = {
+		"rice": 1,
+		"mackerel": 1,
+		"egg": 0,
+	}
+	var first_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			first_customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			first_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+
+	assert_eq(GameManager.get_reserved_ready_count("rice"), 1)
+	assert_eq(
+		GameManager.get_reserved_ready_count(
+			GameManager.MENU_MACKEREL
+		),
+		1
+	)
+	assert_eq(GameManager.get_available_ready_count("rice"), 0)
+	assert_eq(
+		GameManager.get_available_ready_count(
+			GameManager.MENU_MACKEREL
+		),
+		0
+	)
+
+	var second_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			second_customer_id,
+			"seat_2"
+		)
+	)
+	assert_eq(
+		GameManager.choose_menu_for_customer(second_customer_id),
+		""
+	)
+	assert_false(
+		GameManager.mark_customer_seated(
+			second_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_eq(GameManager.state["day_runtime"]["orders"].size(), 1)
+
+
+func test_server_order_reservation_blocks_player_until_server_accepts() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["progression"]["seats"] = 2
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(customer_id, "seat_1")
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	var second_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			second_customer_id,
+			"seat_2"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			second_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+
+	assert_eq(
+		GameManager.try_reserve_waiting_order_for_server(),
+		customer_id
+	)
+	assert_eq(
+		GameManager.get_day_order(customer_id)["reserved_by"],
+		GameManager.RESERVATION_SERVER
+	)
+	assert_eq(GameManager.try_reserve_waiting_order_for_server(), "")
+	assert_false(GameManager.try_accept_waiting_order(customer_id))
+	assert_true(
+		GameManager.try_server_accept_reserved_order(customer_id)
+	)
+	assert_true(GameManager.is_player_carrying_item())
+	assert_eq(
+		GameManager.get_day_order(customer_id)["status"],
+		GameManager.ORDER_PREPARING
+	)
+
+
+func test_server_payment_reservation_blocks_player_collection() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	var customer_id: String = _create_ready_plate_order()
+	assert_true(GameManager.try_serve_order(customer_id))
+	assert_true(GameManager.mark_customer_finished_eating(customer_id))
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+
+	assert_eq(
+		GameManager.try_reserve_waiting_payment_for_server(),
+		customer_id
+	)
+	assert_false(GameManager.collect_customer_payment(customer_id))
+	assert_true(
+		GameManager.try_server_collect_reserved_payment(customer_id)
+	)
+	assert_eq(GameManager.state["currency"], 16)
+
+
+func test_loaded_state_releases_all_transient_server_reservations() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["currency"] = 55
+	assert_true(GameManager.try_hire_server())
+	var customer_id: String = _create_ready_plate_order()
+	assert_eq(
+		GameManager.try_reserve_ready_plate_for_server(),
+		customer_id
+	)
+	assert_true(
+		GameManager.try_server_collect_reserved_plate(customer_id)
+	)
+	var source_state: Dictionary = GameManager.state.duplicate(true)
+	var source_runtime: Dictionary = source_state["day_runtime"]
+	source_runtime["orders"]["reserved_order"] = {
+		"status": GameManager.ORDER_WAITING,
+		"reserved_by": GameManager.RESERVATION_SERVER,
+	}
+	source_runtime["payments"]["reserved_payment"] = {
+		"status": GameManager.PAYMENT_WAITING,
+		"reserved_by": GameManager.RESERVATION_SERVER,
+	}
+
+	assert_true(GameManager.apply_loaded_game_state(source_state))
+	assert_true(GameManager.get_server_carried_item().is_empty())
+	assert_eq(
+		String(
+			GameManager.get_station_item().get("reserved_by", "")
+		),
+		""
+	)
+	assert_eq(
+		String(
+			GameManager.state["day_runtime"]["orders"][
+				"reserved_order"
+			].get("reserved_by", "")
+		),
+		""
+	)
+	assert_eq(
+		String(
+			GameManager.state["day_runtime"]["payments"][
+				"reserved_payment"
+			].get("reserved_by", "")
+		),
+		""
+	)
+
+
+func test_player_counter_claim_blocks_chef_until_plate_finishes() -> void:
+	_prepare_player_and_chef_for_counter_race()
+
+	assert_true(GameManager.try_start_active_order_craft())
+	assert_false(GameManager.try_chef_start_counter_work())
+	assert_true(GameManager.complete_active_order_craft())
+	assert_true(GameManager.try_chef_start_counter_work())
+	assert_eq(GameManager.state["inventory"]["ready"]["mackerel"], 18)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 18)
+
+
+func test_chef_counter_claim_blocks_player_until_plate_is_removed() -> void:
+	_prepare_player_and_chef_for_counter_race()
+
+	assert_true(GameManager.try_chef_start_counter_work())
+	assert_false(GameManager.try_start_active_order_craft())
+	assert_true(GameManager.complete_chef_order_at_counter())
+	assert_false(GameManager.try_start_active_order_craft())
+	assert_eq(
+		GameManager.get_carried_item()["step"],
+		GameManager.PREP_READY_TO_COOK
+	)
+	assert_eq(GameManager.state["inventory"]["ready"]["mackerel"], 18)
+	assert_eq(GameManager.state["inventory"]["ready"]["rice"], 18)
+
+
 func test_apply_loaded_state_rejects_missing_required_key() -> void:
 	var source_state: Dictionary = GameManager.create_default_game_state()
 	source_state.erase("screen")
@@ -1345,3 +1657,56 @@ func _create_ready_plate_order() -> String:
 	assert_true(GameManager.try_start_active_order_craft())
 	assert_true(GameManager.complete_active_order_craft())
 	return customer_id
+
+
+func _prepare_player_and_chef_for_counter_race() -> void:
+	GameManager.state = GameManager.create_default_game_state()
+	GameManager.state["progression"]["seats"] = 2
+	var player_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			player_customer_id,
+			"seat_1"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			player_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_true(GameManager.try_accept_waiting_order(player_customer_id))
+	assert_true(GameManager.try_collect_mackerel_for_order())
+	assert_true(GameManager.try_collect_rice_for_order())
+
+	GameManager.state["currency"] = 70
+	assert_true(
+		GameManager.try_hire_employee(GameManager.STAFF_ROLE_CHEF)
+	)
+	var chef_customer_id: String = GameManager.create_day_customer()
+	assert_true(
+		GameManager.try_assign_customer_to_seat(
+			chef_customer_id,
+			"seat_2"
+		)
+	)
+	assert_true(
+		GameManager.mark_customer_seated(
+			chef_customer_id,
+			GameManager.MENU_MACKEREL
+		)
+	)
+	assert_eq(
+		GameManager.try_chef_accept_waiting_order(chef_customer_id),
+		chef_customer_id
+	)
+	assert_true(
+		GameManager.try_chef_process_station(
+			GameManager.KITCHEN_STATION_FISH
+		)
+	)
+	assert_true(
+		GameManager.try_chef_process_station(
+			GameManager.KITCHEN_STATION_RICE
+		)
+	)
